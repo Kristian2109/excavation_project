@@ -99,7 +99,7 @@ def generate_launch_description():
         name='foxglove_bridge',
         output='screen',
         parameters=[{
-            'port': 8766,
+            'port': 8765,
             'use_sim_time': use_sim_time,
         }],
     )
