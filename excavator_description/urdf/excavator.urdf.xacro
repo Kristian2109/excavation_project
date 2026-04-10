@@ -1,0 +1,212 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="excavator">
+
+  <!-- ============================================================ -->
+  <!--  Excavator Robot URDF / Xacro                                 -->
+  <!--  Links: base_link → chassis → cabin → boom → stick → bucket  -->
+  <!--  Joints: base_joint (fixed to world)                          -->
+  <!--          cabin_joint (continuous – swing)                     -->
+  <!--          boom_joint  (revolute)                               -->
+  <!--          stick_joint (revolute)                               -->
+  <!--          bucket_joint (revolute)                              -->
+  <!-- ============================================================ -->
+
+  <!-- ===================== PROPERTIES ============================ -->
+  <xacro:property name="chassis_length" value="2.0"/>
+  <xacro:property name="chassis_width"  value="1.2"/>
+  <xacro:property name="chassis_height" value="0.5"/>
+
+  <xacro:property name="cabin_length" value="1.0"/>
+  <xacro:property name="cabin_width"  value="1.0"/>
+  <xacro:property name="cabin_height" value="0.8"/>
+
+  <xacro:property name="boom_length"  value="3.0"/>
+  <xacro:property name="boom_radius"  value="0.12"/>
+
+  <xacro:property name="stick_length" value="2.5"/>
+  <xacro:property name="stick_radius" value="0.10"/>
+
+  <xacro:property name="bucket_length" value="0.8"/>
+  <xacro:property name="bucket_width"  value="1.0"/>
+  <xacro:property name="bucket_depth"  value="0.5"/>
+
+  <!-- Colours -->
+  <material name="yellow">
+    <color rgba="0.95 0.77 0.06 1.0"/>
+  </material>
+  <material name="dark_grey">
+    <color rgba="0.2 0.2 0.2 1.0"/>
+  </material>
+  <material name="orange">
+    <color rgba="0.9 0.5 0.1 1.0"/>
+  </material>
+  <material name="steel">
+    <color rgba="0.6 0.6 0.65 1.0"/>
+  </material>
+
+  <!-- ===================== WORLD FRAME ========================== -->
+  <link name="world"/>
+
+  <!-- ===================== BASE LINK ============================ -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+      <material name="dark_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="5000.0"/>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+      <inertia ixx="500.0" ixy="0" ixz="0" iyy="500.0" iyz="0" izz="500.0"/>
+    </inertial>
+  </link>
+
+  <!-- Fixed joint from world to base (will be made movable later via ros2_control) -->
+  <joint name="base_joint" type="fixed">
+    <parent link="world"/>
+    <child  link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ===================== CABIN (SWING) ======================== -->
+  <link name="cabin_link">
+    <visual>
+      <geometry>
+        <box size="${cabin_length} ${cabin_width} ${cabin_height}"/>
+      </geometry>
+      <origin xyz="${cabin_length/2} 0 ${cabin_height/2}" rpy="0 0 0"/>
+      <material name="yellow"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${cabin_length} ${cabin_width} ${cabin_height}"/>
+      </geometry>
+      <origin xyz="${cabin_length/2} 0 ${cabin_height/2}" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="2000.0"/>
+      <origin xyz="${cabin_length/2} 0 ${cabin_height/2}" rpy="0 0 0"/>
+      <inertia ixx="200.0" ixy="0" ixz="0" iyy="200.0" iyz="0" izz="200.0"/>
+    </inertial>
+  </link>
+
+  <joint name="cabin_joint" type="continuous">
+    <parent link="base_link"/>
+    <child  link="cabin_link"/>
+    <origin xyz="0 0 ${chassis_height}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="50.0" friction="10.0"/>
+  </joint>
+
+  <!-- ===================== BOOM ================================= -->
+  <link name="boom_link">
+    <visual>
+      <geometry>
+        <cylinder length="${boom_length}" radius="${boom_radius}"/>
+      </geometry>
+      <!-- Cylinder centred at half-length along local Z, then tilt to point along X -->
+      <origin xyz="${boom_length/2} 0 0" rpy="0 ${pi/2} 0"/>
+      <material name="yellow"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="${boom_length}" radius="${boom_radius}"/>
+      </geometry>
+      <origin xyz="${boom_length/2} 0 0" rpy="0 ${pi/2} 0"/>
+    </collision>
+    <inertial>
+      <mass value="500.0"/>
+      <origin xyz="${boom_length/2} 0 0" rpy="0 ${pi/2} 0"/>
+      <inertia ixx="50.0" ixy="0" ixz="0" iyy="50.0" iyz="0" izz="10.0"/>
+    </inertial>
+  </link>
+
+  <joint name="boom_joint" type="revolute">
+    <parent link="cabin_link"/>
+    <child  link="boom_link"/>
+    <origin xyz="${cabin_length} 0 ${cabin_height * 0.8}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.3" upper="1.2" effort="10000.0" velocity="0.5"/>
+    <dynamics damping="100.0" friction="20.0"/>
+  </joint>
+
+  <!-- ===================== STICK ================================= -->
+  <link name="stick_link">
+    <visual>
+      <geometry>
+        <cylinder length="${stick_length}" radius="${stick_radius}"/>
+      </geometry>
+      <origin xyz="${stick_length/2} 0 0" rpy="0 ${pi/2} 0"/>
+      <material name="orange"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="${stick_length}" radius="${stick_radius}"/>
+      </geometry>
+      <origin xyz="${stick_length/2} 0 0" rpy="0 ${pi/2} 0"/>
+    </collision>
+    <inertial>
+      <mass value="300.0"/>
+      <origin xyz="${stick_length/2} 0 0" rpy="0 ${pi/2} 0"/>
+      <inertia ixx="30.0" ixy="0" ixz="0" iyy="30.0" iyz="0" izz="5.0"/>
+    </inertial>
+  </link>
+
+  <joint name="stick_joint" type="revolute">
+    <parent link="boom_link"/>
+    <child  link="stick_link"/>
+    <origin xyz="${boom_length} 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.4" upper="0.0" effort="8000.0" velocity="0.5"/>
+    <dynamics damping="80.0" friction="15.0"/>
+  </joint>
+
+  <!-- ===================== BUCKET ================================ -->
+  <link name="bucket_link">
+    <visual>
+      <geometry>
+        <box size="${bucket_length} ${bucket_width} ${bucket_depth}"/>
+      </geometry>
+      <origin xyz="${bucket_length/2} 0 ${-bucket_depth/2}" rpy="0 0 0"/>
+      <material name="steel"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${bucket_length} ${bucket_width} ${bucket_depth}"/>
+      </geometry>
+      <origin xyz="${bucket_length/2} 0 ${-bucket_depth/2}" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="150.0"/>
+      <origin xyz="${bucket_length/2} 0 ${-bucket_depth/2}" rpy="0 0 0"/>
+      <inertia ixx="10.0" ixy="0" ixz="0" iyy="10.0" iyz="0" izz="5.0"/>
+    </inertial>
+  </link>
+
+  <joint name="bucket_joint" type="revolute">
+    <parent link="stick_link"/>
+    <child  link="bucket_link"/>
+    <origin xyz="${stick_length} 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.0" upper="2.2" effort="5000.0" velocity="0.8"/>
+    <dynamics damping="40.0" friction="10.0"/>
+  </joint>
+
+  <!-- ===================== BUCKET TIP (END-EFFECTOR) ============= -->
+  <link name="bucket_tip"/>
+
+  <joint name="bucket_tip_joint" type="fixed">
+    <parent link="bucket_link"/>
+    <child  link="bucket_tip"/>
+    <origin xyz="${bucket_length} 0 ${-bucket_depth}" rpy="0 0 0"/>
+  </joint>
+
+</robot>
