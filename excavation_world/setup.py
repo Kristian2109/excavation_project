@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'world_node = excavation_world.world_node:main',
+            'raw_urdf_publisher = excavation_world.raw_urdf_publisher:main',
         ],
     },
 )
