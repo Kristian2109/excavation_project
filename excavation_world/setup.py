@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'excavation_world'
@@ -10,6 +12,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'),
+            glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -28,6 +32,7 @@ setup(
             'raw_urdf_publisher = excavation_world.raw_urdf_publisher:main',
             'base_motion_node = excavation_world.base_motion_node:main',
             'scoop_executor_node = excavation_world.scoop_executor_node:main',
+            'mission_controller_node = excavation_world.mission_controller_node:main',
         ],
     },
 )
