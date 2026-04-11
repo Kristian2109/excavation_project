@@ -109,6 +109,7 @@ class WorldNode(Node):
 
         # Publish once immediately
         self._publish_target_markers()
+        self._publish_hole_frame_marker()
         self._publish_working_position()
         self._publish_excavation_markers()
 
@@ -117,6 +118,7 @@ class WorldNode(Node):
     # ------------------------------------------------------------------ #
     def _timer_cb(self) -> None:
         self._publish_target_markers()
+        self._publish_hole_frame_marker()
         self._publish_working_position()
         self._publish_excavation_markers()
         self._publish_grid_state()
@@ -171,7 +173,7 @@ class WorldNode(Node):
             y=self.grid.resolution * 0.95,
             z=self.grid.resolution * 0.95,
         )
-        marker.color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.25)
+        marker.color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.5)
         marker.pose.orientation.w = 1.0
 
         indices = self.grid.target_flat_indices()
@@ -244,6 +246,83 @@ class WorldNode(Node):
             ),
         )
         self.work_pos_pub.publish(m)
+
+    def _publish_hole_frame_marker(self) -> None:
+        """Publish a bright wireframe at z=0 outlining the hole opening.
+
+        This is visible from the default top-down camera angle and helps
+        the user locate the underground volume.
+        """
+        ma = MarkerArray()
+
+        # --- 1. LINE_STRIP outlining the hole rectangle at z = 0 ---
+        m = Marker()
+        m.header.frame_id = 'world'
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = 'hole_frame'
+        m.id = 0
+        m.type = Marker.LINE_STRIP
+        m.action = Marker.ADD
+        m.scale.x = 0.08  # line width
+        m.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)  # bright yellow
+        m.pose.orientation.w = 1.0
+
+        hole = self.grid  # use grid's stored origin info
+        ox = self.get_parameter('hole_origin_x').value
+        oy = self.get_parameter('hole_origin_y').value
+        oz = self.get_parameter('hole_origin_z').value
+        sx = self.get_parameter('hole_size_x').value
+        sy = self.get_parameter('hole_size_y').value
+        depth = self.get_parameter('hole_depth').value
+
+        corners = [
+            Point(x=ox, y=oy, z=oz),
+            Point(x=ox + sx, y=oy, z=oz),
+            Point(x=ox + sx, y=oy + sy, z=oz),
+            Point(x=ox, y=oy + sy, z=oz),
+            Point(x=ox, y=oy, z=oz),  # close the loop
+        ]
+        m.points = corners
+        ma.markers.append(m)
+
+        # --- 2. Four vertical lines showing hole depth ---
+        for i, (cx, cy) in enumerate([
+            (ox, oy), (ox + sx, oy),
+            (ox + sx, oy + sy), (ox, oy + sy),
+        ]):
+            vm = Marker()
+            vm.header.frame_id = 'world'
+            vm.header.stamp = m.header.stamp
+            vm.ns = 'hole_frame'
+            vm.id = 1 + i
+            vm.type = Marker.LINE_STRIP
+            vm.action = Marker.ADD
+            vm.scale.x = 0.06
+            vm.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=0.6)
+            vm.pose.orientation.w = 1.0
+            vm.points = [
+                Point(x=cx, y=cy, z=oz),
+                Point(x=cx, y=cy, z=oz - depth),
+            ]
+            ma.markers.append(vm)
+
+        # --- 3. TEXT at ground level so Foxglove shows a label ---
+        txt = Marker()
+        txt.header.frame_id = 'world'
+        txt.header.stamp = m.header.stamp
+        txt.ns = 'hole_frame'
+        txt.id = 10
+        txt.type = Marker.TEXT_VIEW_FACING
+        txt.action = Marker.ADD
+        txt.scale.z = 0.5  # text height
+        txt.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
+        txt.pose.position = Point(
+            x=ox + sx / 2.0, y=oy + sy / 2.0, z=oz + 0.6)
+        txt.pose.orientation.w = 1.0
+        txt.text = f'HOLE ({sx}x{sy}x{depth}m) — cubes are underground'
+        ma.markers.append(txt)
+
+        self.target_marker_pub.publish(ma)
 
     # ------------------------------------------------------------------ #
     #  Public API (called by other nodes via service / direct)
