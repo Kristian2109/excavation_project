@@ -1,0 +1,55 @@
+# ROS 2 Build and Install directories
+build/
+install/
+log/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+*.egg
+MANIFEST
+
+# ROS specific
+*.pyc
+*.pyo
+*.log
+*.bag
+*.db3
+*.db3-shm
+*.db3-wal
+
+# Colcon
+COLCON_IGNORE
+.colcon_install_layout
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# OS specific
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
