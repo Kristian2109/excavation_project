@@ -258,25 +258,17 @@ class MissionControllerNode(Node):
             f'Sending arm trajectory ({len(jt.points)} waypoints, '
             f'{self._trajectory_duration(traj):.1f}s)')
 
-        # Synchronous goal send — blocks until the server accepts/rejects.
-        # This avoids the 'unexpected goal response' warning from rclpy.
         send_future = self._action_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, send_future, timeout_sec=5.0)
+        send_future.add_done_callback(self._on_goal_response)
 
-        if not send_future.done():
-            self.get_logger().warn('Send goal timed out')
-            self._finish_scoop(False)
-            return
-
-        goal_handle = send_future.result()
+    def _on_goal_response(self, future) -> None:
+        goal_handle = future.result()
         if goal_handle is None or not goal_handle.accepted:
             self.get_logger().warn('Arm goal rejected')
             self._finish_scoop(False)
             return
 
         self._goal_handle = goal_handle
-
-        # Wait for result asynchronously via callback
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self._on_result)
 
