@@ -6,6 +6,8 @@ This node:
   2. Publishes world → base_link TF as the robot drives.
   3. Publishes the planned path as a nav_msgs/Path for Foxglove.
   4. Publishes a Bool on /base_motion/done when complete.
+  5. Subscribes to /goal_pose (PoseStamped) for new runtime goals.
+     In Foxglove 3D panel: click the "Pose" tool and click in the scene.
 
 Parameters:
     start_x, start_y, start_yaw       – initial base pose
@@ -51,7 +53,7 @@ class BaseMotionNode(Node):
     def __init__(self) -> None:
         super().__init__('base_motion')
 
-        # --- Parameters ---
+        # --- Parameters (float() cast handles string overrides from launch) ---
         self.declare_parameter('start_x', 0.0)
         self.declare_parameter('start_y', 0.0)
         self.declare_parameter('start_yaw', 0.0)
@@ -63,22 +65,21 @@ class BaseMotionNode(Node):
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('auto_start', True)
 
-        start = BasePose(
-            x=self.get_parameter('start_x').value,
-            y=self.get_parameter('start_y').value,
-            yaw=self.get_parameter('start_yaw').value,
-        )
-        goal = BasePose(
-            x=self.get_parameter('goal_x').value,
-            y=self.get_parameter('goal_y').value,
-            yaw=self.get_parameter('goal_yaw').value,
-        )
+        def _f(name: str) -> float:
+            return float(self.get_parameter(name).value)
+
+        start = BasePose(x=_f('start_x'), y=_f('start_y'), yaw=_f('start_yaw'))
+        goal = BasePose(x=_f('goal_x'), y=_f('goal_y'), yaw=_f('goal_yaw'))
+
+        # --- Speed settings (cached for re-planning) ---
+        self.linear_speed = _f('linear_speed')
+        self.angular_speed = _f('angular_speed')
 
         # --- Plan trajectory ---
         self.trajectory = plan_base_trajectory(
             start, goal,
-            linear_speed=self.get_parameter('linear_speed').value,
-            angular_speed=self.get_parameter('angular_speed').value,
+            linear_speed=self.linear_speed,
+            angular_speed=self.angular_speed,
         )
         self.get_logger().info(
             f'Base trajectory planned: {len(self.trajectory.points)} points, '
@@ -98,6 +99,10 @@ class BaseMotionNode(Node):
         self.path_pub = self.create_publisher(Path, '/base_motion/path', latching)
         self.done_pub = self.create_publisher(Bool, '/base_motion/done', 10)
 
+        # --- Subscriber for runtime goal updates from Foxglove ---
+        self.create_subscription(
+            PoseStamped, '/goal_pose', self._goal_pose_cb, 10)
+
         # --- Publish the planned path once ---
         self._publish_path()
 
@@ -114,11 +119,45 @@ class BaseMotionNode(Node):
     # ------------------------------------------------------------------ #
     def start_motion(self) -> None:
         """Begin executing the planned trajectory."""
-        if self.running or self.done:
+        if self.running:
             return
         self.running = True
+        self.done = False
         self.t_start = self.get_clock().now()
         self.get_logger().info('Base motion started')
+
+    # ------------------------------------------------------------------ #
+    #  Goal pose callback (from Foxglove "Pose" tool or /goal_pose topic)
+    # ------------------------------------------------------------------ #
+    def _goal_pose_cb(self, msg: PoseStamped) -> None:
+        """Re-plan trajectory from current position to clicked goal."""
+        # Extract yaw from quaternion
+        q = msg.pose.orientation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+
+        goal = BasePose(
+            x=msg.pose.position.x,
+            y=msg.pose.position.y,
+            yaw=yaw,
+        )
+
+        self.get_logger().info(
+            f'New goal received: ({goal.x:.2f}, {goal.y:.2f}, '
+            f'yaw={math.degrees(goal.yaw):.1f}°)')
+
+        # Re-plan from wherever we are now
+        self.trajectory = plan_base_trajectory(
+            self.current_pose, goal,
+            linear_speed=self.linear_speed,
+            angular_speed=self.angular_speed,
+        )
+        self.get_logger().info(
+            f'Re-planned: {len(self.trajectory.points)} points, '
+            f'duration={self.trajectory.duration:.1f}s')
+
+        self._publish_path()
+        self.start_motion()
 
     # ------------------------------------------------------------------ #
     #  Timer callback
