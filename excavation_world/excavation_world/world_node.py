@@ -85,14 +85,16 @@ class WorldNode(Node):
         }
 
         # --- Publishers ---
-        latching = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        # Use depth=5 volatile QoS so Foxglove bridge can subscribe.
+        # The timer re-publishes periodically, so latching is not needed.
+        marker_qos = QoSProfile(depth=5)
 
         self.marker_pub = self.create_publisher(
-            MarkerArray, '/excavation/markers', latching)
+            MarkerArray, '/excavation/markers', marker_qos)
         self.target_marker_pub = self.create_publisher(
-            MarkerArray, '/excavation/target_markers', latching)
+            MarkerArray, '/excavation/target_markers', marker_qos)
         self.work_pos_pub = self.create_publisher(
-            Marker, '/excavation/working_position', latching)
+            Marker, '/excavation/working_position', marker_qos)
         self.grid_state_pub = self.create_publisher(
             ExcavationGridMsg, '/excavation/grid_state', 10)
 
@@ -114,6 +116,8 @@ class WorldNode(Node):
     #  Periodic publish
     # ------------------------------------------------------------------ #
     def _timer_cb(self) -> None:
+        self._publish_target_markers()
+        self._publish_working_position()
         self._publish_excavation_markers()
         self._publish_grid_state()
 
