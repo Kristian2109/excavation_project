@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  excavator.srdf – Semantic Robot Description Format for MoveIt 2
+
+  Defines:
+    - "arm" planning group:  cabin_joint → boom_joint → stick_joint → bucket_joint
+    - "bucket" end-effector: bucket_tip link
+    - Named target poses:   home, ready, dig
+    - Passive joints:       none (all actuated)
+    - Disabled collision pairs (self-collision)
+-->
+<robot name="excavator">
+
+  <!-- ==================== Planning Groups ==================== -->
+  <group name="arm">
+    <chain base_link="base_link" tip_link="bucket_tip"/>
+  </group>
+
+  <!-- ==================== End Effectors ====================== -->
+  <end_effector name="bucket"
+                parent_link="bucket_link"
+                group="arm"
+                parent_group="arm"/>
+
+  <!-- ==================== Named Poses ======================== -->
+  <!-- Home: all joints at zero -->
+  <group_state name="home" group="arm">
+    <joint name="cabin_joint"  value="0.0"/>
+    <joint name="boom_joint"   value="0.0"/>
+    <joint name="stick_joint"  value="0.0"/>
+    <joint name="bucket_joint" value="0.0"/>
+  </group_state>
+
+  <!-- Ready: boom up, stick partially folded — safe starting config -->
+  <group_state name="ready" group="arm">
+    <joint name="cabin_joint"  value="0.0"/>
+    <joint name="boom_joint"   value="0.3"/>
+    <joint name="stick_joint"  value="-1.2"/>
+    <joint name="bucket_joint" value="0.5"/>
+  </group_state>
+
+  <!-- Dig: typical digging pose (boom forward/down, stick extended) -->
+  <group_state name="dig" group="arm">
+    <joint name="cabin_joint"  value="0.0"/>
+    <joint name="boom_joint"   value="0.8"/>
+    <joint name="stick_joint"  value="-1.8"/>
+    <joint name="bucket_joint" value="0.5"/>
+  </group_state>
+
+  <!-- ==================== Disabled Collisions ================ -->
+  <!-- Adjacent links never collide -->
+  <disable_collisions link1="base_link"   link2="cabin_link"  reason="Adjacent"/>
+  <disable_collisions link1="cabin_link"  link2="boom_link"   reason="Adjacent"/>
+  <disable_collisions link1="boom_link"   link2="stick_link"  reason="Adjacent"/>
+  <disable_collisions link1="stick_link"  link2="bucket_link" reason="Adjacent"/>
+
+  <!-- Non-adjacent pairs that can't physically collide on this arm -->
+  <disable_collisions link1="base_link"   link2="boom_link"   reason="Never"/>
+  <disable_collisions link1="base_link"   link2="stick_link"  reason="Never"/>
+  <disable_collisions link1="base_link"   link2="bucket_link" reason="Never"/>
+  <disable_collisions link1="cabin_link"  link2="stick_link"  reason="Never"/>
+  <disable_collisions link1="cabin_link"  link2="bucket_link" reason="Never"/>
+  <disable_collisions link1="boom_link"   link2="bucket_link" reason="Never"/>
+
+</robot>

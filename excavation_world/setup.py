@@ -27,6 +27,7 @@ setup(
             'world_node = excavation_world.world_node:main',
             'raw_urdf_publisher = excavation_world.raw_urdf_publisher:main',
             'base_motion_node = excavation_world.base_motion_node:main',
+            'scoop_executor_node = excavation_world.scoop_executor_node:main',
         ],
     },
 )

@@ -1,0 +1,46 @@
+# MoveIt 2 move_group configuration
+move_group:
+  ros__parameters:
+    # Planning
+    planning_scene_monitor_options:
+      name: "planning_scene_monitor"
+      robot_description: "robot_description"
+      joint_state_topic: "/joint_states"
+      attached_collision_object_topic: "/planning_scene_monitor/attached_collision_object"
+      publish_planning_scene_topic: "/planning_scene_monitor/publish_planning_scene"
+      monitored_planning_scene_topic: "/planning_scene_monitor/monitored_planning_scene"
+      wait_for_initial_state_timeout: 10.0
+
+    planning_pipelines:
+      pipeline_names:
+        - "ompl"
+
+    # Default planner
+    default_planning_pipeline: "ompl"
+    
+    # Capabilities 
+    capabilities: ""
+    disable_capabilities: ""
+    
+    # Allowed execution duration scaling and monitoring
+    trajectory_execution:
+      allowed_execution_duration_scaling: 2.0
+      allowed_goal_duration_margin: 0.5
+      allowed_start_tolerance: 0.01
+      execution_duration_monitoring: false
+
+    moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+    moveit_simple_controller_manager:
+      controller_names:
+        - arm_controller
+
+      arm_controller:
+        type: FollowJointTrajectory
+        action_ns: follow_joint_trajectory
+        default: true
+        joints:
+          - cabin_joint
+          - boom_joint
+          - stick_joint
+          - bucket_joint
