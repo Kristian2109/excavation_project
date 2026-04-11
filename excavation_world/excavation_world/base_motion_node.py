@@ -175,9 +175,13 @@ class BaseMotionNode(Node):
                     f'Base motion complete. Final pose: '
                     f'({self.current_pose.x:.2f}, {self.current_pose.y:.2f}, '
                     f'yaw={math.degrees(self.current_pose.yaw):.1f}°)')
-                msg = Bool()
-                msg.data = True
-                self.done_pub.publish(msg)
+
+        # Keep re-publishing done=True so late-starting subscribers
+        # (e.g. mission_controller_node) don't miss it.
+        if self.done:
+            msg = Bool()
+            msg.data = True
+            self.done_pub.publish(msg)
 
         # Always publish TF so the robot has a valid world→base_link
         self._publish_tf()

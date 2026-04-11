@@ -139,6 +139,13 @@ class WorldNode(Node):
         self._publish_working_position()
         self._publish_excavation_markers()
 
+    def _initial_republish(self) -> None:
+        """One-shot republish after startup delay for Foxglove."""
+        if not self._initial_done:
+            self._initial_done = True
+            self._publish_target_and_frame_markers()
+            self._publish_working_position()
+
     # ------------------------------------------------------------------ #
     #  Scoop subscription callback
     # ------------------------------------------------------------------ #
@@ -296,23 +303,30 @@ class WorldNode(Node):
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns = 'excavated'
         marker.id = 0
-        marker.type = Marker.CUBE_LIST
-        marker.action = Marker.ADD
-        marker.scale = Vector3(
-            x=self.grid.resolution * 0.92,
-            y=self.grid.resolution * 0.92,
-            z=self.grid.resolution * 0.92,
-        )
-        marker.color = ColorRGBA(r=0.9, g=0.5, b=0.1, a=0.8)
         marker.pose.orientation.w = 1.0
 
         nx, ny, nz = self.grid.shape
+        points = []
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
                     if self.grid.is_excavated(ix, iy, iz):
                         cx, cy, cz = self.grid.cell_centre(ix, iy, iz)
-                        marker.points.append(Point(x=cx, y=cy, z=cz))
+                        points.append(Point(x=cx, y=cy, z=cz))
+
+        if points:
+            marker.type = Marker.CUBE_LIST
+            marker.action = Marker.ADD
+            marker.scale = Vector3(
+                x=self.grid.resolution * 0.92,
+                y=self.grid.resolution * 0.92,
+                z=self.grid.resolution * 0.92,
+            )
+            marker.color = ColorRGBA(r=0.9, g=0.5, b=0.1, a=0.8)
+            marker.points = points
+        else:
+            # Delete any previously shown marker (avoid empty CUBE_LIST)
+            marker.action = Marker.DELETEALL
 
         ma.markers.append(marker)
         self.marker_pub.publish(ma)
