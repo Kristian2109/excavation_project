@@ -109,23 +109,35 @@ class WorldNode(Node):
         self._static_tf_broadcaster = StaticTransformBroadcaster(self)
         self._publish_static_world_tf()
 
-        # --- Timer ---
+        # --- Timers ---
+        # Fast timer: grid state only (lightweight, no markers)
         rate = self.get_parameter('publish_rate').value
-        self.create_timer(1.0 / rate, self._timer_cb)
+        self.create_timer(1.0 / rate, self._fast_timer_cb)
 
-        # Publish once immediately
-        self._publish_target_and_frame_markers()
-        self._publish_working_position()
-        self._publish_excavation_markers()
+        # Slow timer: republish static markers as keepalive for late
+        # Foxglove connections (every 10 s).  Target cubes + hole frame
+        # + working position never change, so 2 Hz is overkill and
+        # causes blinking.
+        self.create_timer(10.0, self._slow_timer_cb)
 
-    # ------------------------------------------------------------------ #
-    #  Periodic publish
-    # ------------------------------------------------------------------ #
-    def _timer_cb(self) -> None:
+        # Publish everything once immediately
         self._publish_target_and_frame_markers()
         self._publish_working_position()
         self._publish_excavation_markers()
         self._publish_grid_state()
+
+    # ------------------------------------------------------------------ #
+    #  Periodic publish
+    # ------------------------------------------------------------------ #
+    def _fast_timer_cb(self) -> None:
+        """Lightweight tick — only grid state (no marker re-rendering)."""
+        self._publish_grid_state()
+
+    def _slow_timer_cb(self) -> None:
+        """Infrequent keepalive so late Foxglove subscribers see markers."""
+        self._publish_target_and_frame_markers()
+        self._publish_working_position()
+        self._publish_excavation_markers()
 
     # ------------------------------------------------------------------ #
     #  Scoop subscription callback

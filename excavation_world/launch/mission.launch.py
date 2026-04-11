@@ -102,7 +102,7 @@ def generate_launch_description():
 
     # Delay the mission controller so that controllers have been spawned
     delayed_mission = TimerAction(
-        period=6.0,
+        period=14.0,
         actions=[mission_controller],
     )
 

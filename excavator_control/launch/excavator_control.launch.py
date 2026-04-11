@@ -119,7 +119,7 @@ def generate_launch_description():
 
     # Delay spawners so controller_manager has time to initialise
     delayed_spawners = TimerAction(
-        period=3.0,
+        period=8.0,
         actions=[joint_state_broadcaster_spawner, arm_controller_spawner],
     )
 
