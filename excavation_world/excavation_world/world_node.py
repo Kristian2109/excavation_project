@@ -57,8 +57,8 @@ class WorldNode(Node):
         self.declare_parameter('hole_size_y', 3.0)
         self.declare_parameter('hole_depth', 2.0)
         self.declare_parameter('publish_rate', 2.0)
-        self.declare_parameter('working_position_x', 3.0)
-        self.declare_parameter('working_position_y', 0.0)
+        self.declare_parameter('working_position_x', 2.0)
+        self.declare_parameter('working_position_y', -0.5)
         self.declare_parameter('working_position_z', 0.0)
         self.declare_parameter('working_position_yaw', 0.0)
 

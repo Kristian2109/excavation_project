@@ -49,8 +49,8 @@ class ScoopExecutorNode(Node):
         super().__init__('scoop_executor')
 
         # Parameters
-        self.declare_parameter('base_x', 3.0)
-        self.declare_parameter('base_y', 0.0)
+        self.declare_parameter('base_x', 2.0)
+        self.declare_parameter('base_y', -0.5)
         self.declare_parameter('base_yaw', 0.0)
 
         self.base_x = float(self.get_parameter('base_x').value)

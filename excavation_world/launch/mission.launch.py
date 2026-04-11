@@ -67,8 +67,8 @@ def generate_launch_description():
             'hole_size_y': 3.0,
             'hole_depth': 2.0,
             'publish_rate': 2.0,
-            'working_position_x': 3.0,
-            'working_position_y': 0.0,
+            'working_position_x': 2.0,
+            'working_position_y': -0.5,
             'working_position_z': 0.0,
             'working_position_yaw': 0.0,
             'use_sim_time': use_sim_time,
@@ -108,8 +108,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
-        DeclareLaunchArgument('goal_x', default_value='3.0'),
-        DeclareLaunchArgument('goal_y', default_value='0.0'),
+        DeclareLaunchArgument('goal_x', default_value='2.0'),
+        DeclareLaunchArgument('goal_y', default_value='-0.5'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         DeclareLaunchArgument('execute_arm', default_value='true',
                               description='Set false for headless / grid-only mode'),

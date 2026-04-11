@@ -79,8 +79,8 @@ class MissionControllerNode(Node):
         self.declare_parameter('hole_size_y', 3.0)
         self.declare_parameter('hole_depth', 2.0)
         self.declare_parameter('resolution', 0.25)
-        self.declare_parameter('base_x', 3.0)
-        self.declare_parameter('base_y', 0.0)
+        self.declare_parameter('base_x', 2.0)
+        self.declare_parameter('base_y', -0.5)
         self.declare_parameter('base_yaw', 0.0)
         self.declare_parameter('execute_arm', True)
         self.declare_parameter('auto_start', True)
@@ -234,7 +234,7 @@ class MissionControllerNode(Node):
             self._last_scoop_time = time.monotonic()
             return
 
-        # -- Send to arm controller --
+        # -- Send to arm controller (fully async, no blocking) --
         self._scoop_active = True
         self._current_scoop = scoop
 
@@ -246,25 +246,17 @@ class MissionControllerNode(Node):
             f'Sending arm trajectory ({len(jt.points)} waypoints, '
             f'{self._trajectory_duration(traj):.1f}s)')
 
-        # Synchronous goal send — blocks until the server accepts/rejects.
-        # This avoids the 'unexpected goal response' warning from rclpy.
         send_future = self._action_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, send_future, timeout_sec=5.0)
+        send_future.add_done_callback(self._on_goal_response)
 
-        if not send_future.done():
-            self.get_logger().warn('Send goal timed out')
-            self._finish_scoop(False)
-            return
-
-        goal_handle = send_future.result()
+    def _on_goal_response(self, future) -> None:
+        goal_handle = future.result()
         if goal_handle is None or not goal_handle.accepted:
             self.get_logger().warn('Arm goal rejected')
             self._finish_scoop(False)
             return
 
         self._goal_handle = goal_handle
-
-        # Wait for result asynchronously via callback
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self._on_result)
 

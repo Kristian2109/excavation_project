@@ -125,8 +125,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
-        DeclareLaunchArgument('goal_x', default_value='3.0'),
-        DeclareLaunchArgument('goal_y', default_value='0.0'),
+        DeclareLaunchArgument('goal_x', default_value='2.0'),
+        DeclareLaunchArgument('goal_y', default_value='-0.5'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
 
         robot_state_publisher,
