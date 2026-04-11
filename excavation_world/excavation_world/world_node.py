@@ -25,8 +25,9 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy
 
 from std_msgs.msg import Header, ColorRGBA
-from geometry_msgs.msg import Point, Pose, Quaternion, Vector3
+from geometry_msgs.msg import Point, Pose, Quaternion, Vector3, TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
+from tf2_ros import StaticTransformBroadcaster
 
 from excavation_msgs.msg import ScoopAction as ScoopActionMsg
 from excavation_msgs.msg import ExcavationGrid as ExcavationGridMsg
@@ -103,13 +104,17 @@ class WorldNode(Node):
             ScoopActionMsg, '/excavation/apply_scoop',
             self._scoop_cb, 10)
 
+        # --- Static TF: publish a world frame so Foxglove has a ---
+        # --- stable fixed frame even before base_motion_node starts ---
+        self._static_tf_broadcaster = StaticTransformBroadcaster(self)
+        self._publish_static_world_tf()
+
         # --- Timer ---
         rate = self.get_parameter('publish_rate').value
         self.create_timer(1.0 / rate, self._timer_cb)
 
         # Publish once immediately
-        self._publish_target_markers()
-        self._publish_hole_frame_marker()
+        self._publish_target_and_frame_markers()
         self._publish_working_position()
         self._publish_excavation_markers()
 
@@ -117,8 +122,7 @@ class WorldNode(Node):
     #  Periodic publish
     # ------------------------------------------------------------------ #
     def _timer_cb(self) -> None:
-        self._publish_target_markers()
-        self._publish_hole_frame_marker()
+        self._publish_target_and_frame_markers()
         self._publish_working_position()
         self._publish_excavation_markers()
         self._publish_grid_state()
@@ -158,12 +162,29 @@ class WorldNode(Node):
     # ------------------------------------------------------------------ #
     #  Marker publishers
     # ------------------------------------------------------------------ #
-    def _publish_target_markers(self) -> None:
-        """Publish translucent cubes for the full target volume."""
+    def _publish_static_world_tf(self) -> None:
+        """Publish static identity TF so 'world' is always available."""
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'world'
+        t.child_frame_id = 'world_fixed'
+        t.transform.rotation.w = 1.0
+        self._static_tf_broadcaster.sendTransform(t)
+
+    def _publish_target_and_frame_markers(self) -> None:
+        """Publish target cubes AND hole frame in ONE MarkerArray.
+
+        Combining them avoids flickering: Foxglove replaces all markers
+        from a topic when a new MarkerArray arrives, so two separate
+        publishes would alternate and blink.
+        """
+        now = self.get_clock().now().to_msg()
         ma = MarkerArray()
+
+        # --- Target cubes ---
         marker = Marker()
         marker.header.frame_id = 'world'
-        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.stamp = now
         marker.ns = 'target_hole'
         marker.id = 0
         marker.type = Marker.CUBE_LIST
@@ -187,9 +208,73 @@ class WorldNode(Node):
             marker.points.append(Point(x=cx, y=cy, z=cz))
 
         ma.markers.append(marker)
+
+        # --- Hole frame (lines + text) ---
+        ox = self.get_parameter('hole_origin_x').value
+        oy = self.get_parameter('hole_origin_y').value
+        oz = self.get_parameter('hole_origin_z').value
+        sx = self.get_parameter('hole_size_x').value
+        sy = self.get_parameter('hole_size_y').value
+        depth = self.get_parameter('hole_depth').value
+
+        # Top rectangle
+        m = Marker()
+        m.header.frame_id = 'world'
+        m.header.stamp = now
+        m.ns = 'hole_frame'
+        m.id = 0
+        m.type = Marker.LINE_STRIP
+        m.action = Marker.ADD
+        m.scale.x = 0.08
+        m.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
+        m.pose.orientation.w = 1.0
+        m.points = [
+            Point(x=ox, y=oy, z=oz),
+            Point(x=ox + sx, y=oy, z=oz),
+            Point(x=ox + sx, y=oy + sy, z=oz),
+            Point(x=ox, y=oy + sy, z=oz),
+            Point(x=ox, y=oy, z=oz),
+        ]
+        ma.markers.append(m)
+
+        # Vertical depth lines
+        for i, (cx, cy) in enumerate([
+            (ox, oy), (ox + sx, oy),
+            (ox + sx, oy + sy), (ox, oy + sy),
+        ]):
+            vm = Marker()
+            vm.header.frame_id = 'world'
+            vm.header.stamp = now
+            vm.ns = 'hole_frame'
+            vm.id = 1 + i
+            vm.type = Marker.LINE_STRIP
+            vm.action = Marker.ADD
+            vm.scale.x = 0.06
+            vm.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=0.6)
+            vm.pose.orientation.w = 1.0
+            vm.points = [
+                Point(x=cx, y=cy, z=oz),
+                Point(x=cx, y=cy, z=oz - depth),
+            ]
+            ma.markers.append(vm)
+
+        # Text label
+        txt = Marker()
+        txt.header.frame_id = 'world'
+        txt.header.stamp = now
+        txt.ns = 'hole_frame'
+        txt.id = 10
+        txt.type = Marker.TEXT_VIEW_FACING
+        txt.action = Marker.ADD
+        txt.scale.z = 0.5
+        txt.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
+        txt.pose.position = Point(
+            x=ox + sx / 2.0, y=oy + sy / 2.0, z=oz + 0.6)
+        txt.pose.orientation.w = 1.0
+        txt.text = f'HOLE ({sx}x{sy}x{depth}m)'
+        ma.markers.append(txt)
+
         self.target_marker_pub.publish(ma)
-        self.get_logger().info(
-            f'Published target markers: {len(marker.points)} cells')
 
     def _publish_excavation_markers(self) -> None:
         """Publish cubes for excavated cells (orange)."""
@@ -247,82 +332,6 @@ class WorldNode(Node):
         )
         self.work_pos_pub.publish(m)
 
-    def _publish_hole_frame_marker(self) -> None:
-        """Publish a bright wireframe at z=0 outlining the hole opening.
-
-        This is visible from the default top-down camera angle and helps
-        the user locate the underground volume.
-        """
-        ma = MarkerArray()
-
-        # --- 1. LINE_STRIP outlining the hole rectangle at z = 0 ---
-        m = Marker()
-        m.header.frame_id = 'world'
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = 'hole_frame'
-        m.id = 0
-        m.type = Marker.LINE_STRIP
-        m.action = Marker.ADD
-        m.scale.x = 0.08  # line width
-        m.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)  # bright yellow
-        m.pose.orientation.w = 1.0
-
-        hole = self.grid  # use grid's stored origin info
-        ox = self.get_parameter('hole_origin_x').value
-        oy = self.get_parameter('hole_origin_y').value
-        oz = self.get_parameter('hole_origin_z').value
-        sx = self.get_parameter('hole_size_x').value
-        sy = self.get_parameter('hole_size_y').value
-        depth = self.get_parameter('hole_depth').value
-
-        corners = [
-            Point(x=ox, y=oy, z=oz),
-            Point(x=ox + sx, y=oy, z=oz),
-            Point(x=ox + sx, y=oy + sy, z=oz),
-            Point(x=ox, y=oy + sy, z=oz),
-            Point(x=ox, y=oy, z=oz),  # close the loop
-        ]
-        m.points = corners
-        ma.markers.append(m)
-
-        # --- 2. Four vertical lines showing hole depth ---
-        for i, (cx, cy) in enumerate([
-            (ox, oy), (ox + sx, oy),
-            (ox + sx, oy + sy), (ox, oy + sy),
-        ]):
-            vm = Marker()
-            vm.header.frame_id = 'world'
-            vm.header.stamp = m.header.stamp
-            vm.ns = 'hole_frame'
-            vm.id = 1 + i
-            vm.type = Marker.LINE_STRIP
-            vm.action = Marker.ADD
-            vm.scale.x = 0.06
-            vm.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=0.6)
-            vm.pose.orientation.w = 1.0
-            vm.points = [
-                Point(x=cx, y=cy, z=oz),
-                Point(x=cx, y=cy, z=oz - depth),
-            ]
-            ma.markers.append(vm)
-
-        # --- 3. TEXT at ground level so Foxglove shows a label ---
-        txt = Marker()
-        txt.header.frame_id = 'world'
-        txt.header.stamp = m.header.stamp
-        txt.ns = 'hole_frame'
-        txt.id = 10
-        txt.type = Marker.TEXT_VIEW_FACING
-        txt.action = Marker.ADD
-        txt.scale.z = 0.5  # text height
-        txt.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
-        txt.pose.position = Point(
-            x=ox + sx / 2.0, y=oy + sy / 2.0, z=oz + 0.6)
-        txt.pose.orientation.w = 1.0
-        txt.text = f'HOLE ({sx}x{sy}x{depth}m) — cubes are underground'
-        ma.markers.append(txt)
-
-        self.target_marker_pub.publish(ma)
 
     # ------------------------------------------------------------------ #
     #  Public API (called by other nodes via service / direct)
