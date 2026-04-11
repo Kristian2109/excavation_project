@@ -106,6 +106,22 @@ def generate_launch_description():
         actions=[mission_controller],
     )
 
+    # --- Debug visualizer (starts immediately) ---
+    debug_visualizer = Node(
+        package='excavation_world',
+        executable='debug_visualizer_node',
+        name='debug_visualizer',
+        output='screen',
+        parameters=[{
+            'base_x': goal_x,
+            'base_y': goal_y,
+            'base_yaw': goal_yaw,
+            'trail_max_points': 2000,
+            'publish_rate': 4.0,
+            'use_sim_time': use_sim_time,
+        }],
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('goal_x', default_value='2.0'),
@@ -116,5 +132,6 @@ def generate_launch_description():
 
         control_launch,
         world_node,
+        debug_visualizer,
         delayed_mission,
     ])

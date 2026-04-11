@@ -38,12 +38,14 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.qos import QoSProfile
 
-from std_msgs.msg import Bool
-from geometry_msgs.msg import Pose, Point, Quaternion
+from std_msgs.msg import Bool, ColorRGBA
+from geometry_msgs.msg import Pose, Point, Quaternion, Vector3
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.action import FollowJointTrajectory
 from builtin_interfaces.msg import Duration
+from visualization_msgs.msg import Marker, MarkerArray
 
 from excavation_msgs.msg import (
     MissionStatus as MissionStatusMsg,
@@ -62,7 +64,7 @@ from excavation_world.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
 )
-from excavation_world.robot_model import JOINT_NAMES
+from excavation_world.robot_model import JOINT_NAMES, ExcavatorModel
 
 
 class MissionControllerNode(Node):
@@ -123,6 +125,10 @@ class MissionControllerNode(Node):
             MissionStatusMsg, '/mission/status', 10)
         self.scoop_action_pub = self.create_publisher(
             ScoopActionMsg, '/excavation/apply_scoop', 10)
+        self.arm_traj_pub = self.create_publisher(
+            MarkerArray, '/debug/arm_trajectory', QoSProfile(depth=5))
+        self.scoop_targets_pub = self.create_publisher(
+            MarkerArray, '/debug/scoop_targets', QoSProfile(depth=5))
 
         # ----- Subscriber: base motion done -----
         self.create_subscription(
@@ -194,6 +200,9 @@ class MissionControllerNode(Node):
             f'Plan ready: {plan.total_scoops} scoops, '
             f'coverage={cov:.0%}')
 
+        # Visualise all planned scoop targets
+        self._publish_scoop_targets()
+
     # ------------------------------------------------------------------ #
     #  Scoop execution
     # ------------------------------------------------------------------ #
@@ -237,6 +246,9 @@ class MissionControllerNode(Node):
         # -- Send to arm controller (fully async, no blocking) --
         self._scoop_active = True
         self._current_scoop = scoop
+
+        # Visualise this scoop's arm trajectory
+        self._publish_arm_trajectory(traj)
 
         jt = self._build_joint_trajectory(traj)
         goal = FollowJointTrajectory.Goal()
@@ -353,6 +365,92 @@ class MissionControllerNode(Node):
         msg.status_text = p.status_text
 
         self.status_pub.publish(msg)
+
+    # ------------------------------------------------------------------ #
+    #  Visualization: scoop plan targets
+    # ------------------------------------------------------------------ #
+    def _publish_scoop_targets(self) -> None:
+        """Publish sphere markers for all planned scoop dig targets."""
+        if self.controller.plan is None:
+            return
+        ma = MarkerArray()
+        now = self.get_clock().now().to_msg()
+
+        m = Marker()
+        m.header.frame_id = 'world'
+        m.header.stamp = now
+        m.ns = 'scoop_targets'
+        m.id = 0
+        m.type = Marker.SPHERE_LIST
+        m.action = Marker.ADD
+        m.scale = Vector3(x=0.15, y=0.15, z=0.15)
+        m.color = ColorRGBA(r=0.0, g=1.0, b=0.5, a=0.6)
+        m.pose.orientation.w = 1.0
+
+        for s in self.controller.plan.scoops:
+            t = s.dig_target
+            m.points.append(Point(
+                x=float(t[0]), y=float(t[1]), z=float(t[2])))
+
+        ma.markers.append(m)
+        self.scoop_targets_pub.publish(ma)
+
+    # ------------------------------------------------------------------ #
+    #  Visualization: current arm trajectory
+    # ------------------------------------------------------------------ #
+    def _publish_arm_trajectory(self, traj: ScoopTrajectory) -> None:
+        """Publish a LINE_STRIP of the bucket-tip path for the current scoop."""
+        ma = MarkerArray()
+        now = self.get_clock().now().to_msg()
+
+        bx = self.controller.base_x
+        by = self.controller.base_y
+        byaw = self.controller.base_yaw
+
+        # Convert waypoint joint positions → bucket tip via FK
+        points: list[Point] = []
+        for wp in traj.waypoints:
+            model = ExcavatorModel(
+                joint_positions=wp.joint_positions.copy(),
+                base_x=bx, base_y=by, base_yaw=byaw,
+            )
+            tip = model.bucket_tip_position()
+            points.append(Point(
+                x=float(tip[0]), y=float(tip[1]), z=float(tip[2])))
+
+        m = Marker()
+        m.header.frame_id = 'world'
+        m.header.stamp = now
+        m.ns = 'arm_trajectory'
+        m.id = 0
+        m.type = Marker.LINE_STRIP
+        m.action = Marker.ADD
+        m.scale.x = 0.06
+        m.color = ColorRGBA(r=1.0, g=0.0, b=1.0, a=0.9)  # magenta
+        m.pose.orientation.w = 1.0
+        m.points = points
+        # Lifetime = one scoop duration so it auto-deletes
+        total_dur = sum(wp.duration for wp in traj.waypoints)
+        m.lifetime.sec = int(total_dur) + 2
+        ma.markers.append(m)
+
+        # Also publish spheres at waypoints with names
+        for i, wp in enumerate(traj.waypoints):
+            sm = Marker()
+            sm.header.frame_id = 'world'
+            sm.header.stamp = now
+            sm.ns = 'arm_waypoints'
+            sm.id = i
+            sm.type = Marker.SPHERE
+            sm.action = Marker.ADD
+            sm.scale = Vector3(x=0.12, y=0.12, z=0.12)
+            sm.color = ColorRGBA(r=1.0, g=0.0, b=1.0, a=0.8)
+            sm.pose.position = points[i]
+            sm.pose.orientation.w = 1.0
+            sm.lifetime.sec = int(total_dur) + 2
+            ma.markers.append(sm)
+
+        self.arm_traj_pub.publish(ma)
 
 
 def main(args=None):

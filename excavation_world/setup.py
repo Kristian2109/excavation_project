@@ -33,6 +33,7 @@ setup(
             'base_motion_node = excavation_world.base_motion_node:main',
             'scoop_executor_node = excavation_world.scoop_executor_node:main',
             'mission_controller_node = excavation_world.mission_controller_node:main',
+            'debug_visualizer_node = excavation_world.debug_visualizer_node:main',
         ],
     },
 )
