@@ -127,6 +127,29 @@ def plan_single_scoop(
 
     waypoints: List[ScoopWaypoint] = []
 
+    # Helper: try IK at the preferred height, then fall back to lower values.
+    # Close-range targets at shallow depths can't reach high above ground
+    # because the boom joint can't rotate far enough upward.
+    MIN_CLEARANCE = 0.10  # metres – absolute minimum above/below target
+
+    def _solve_with_fallback(
+        xy: np.ndarray, preferred_z: float, min_z: float,
+        bucket_angle: float, steps: int = 4,
+    ) -> Optional[tuple]:
+        """Try IK from preferred_z down to min_z.
+
+        Returns (IKResult, actual_target_xyz) on success, else None.
+        """
+        delta = (preferred_z - min_z) / max(steps - 1, 1)
+        for i in range(steps):
+            z = preferred_z - i * delta
+            pt = np.array([xy[0], xy[1], z])
+            result = solve_ik_nearest(pt, bucket_angle_world=bucket_angle,
+                                      **ik_kwargs)
+            if result.success:
+                return result, pt
+        return None
+
     # --- 1. READY: safe starting configuration ---
     # Set the cabin angle to point toward the target
     ready_ik = solve_ik_nearest(
@@ -155,11 +178,17 @@ def plan_single_scoop(
     ))
 
     # --- 2. APPROACH: above the dig point ---
-    approach_target = target + np.array([0, 0, approach_height])
-    approach_ik = solve_ik_nearest(
-        approach_target, bucket_angle_world=bucket_dig_angle, **ik_kwargs)
-    if not approach_ik.success:
+    # Try the ideal approach height first; fall back to lower heights so that
+    # near-range / surface-level scoops are not rejected unnecessarily.
+    approach_result = _solve_with_fallback(
+        target[:2],
+        preferred_z=target[2] + approach_height,
+        min_z=target[2] + MIN_CLEARANCE,
+        bucket_angle=bucket_dig_angle,
+    )
+    if approach_result is None:
         return None
+    approach_ik, approach_target = approach_result
     waypoints.append(ScoopWaypoint(
         name='approach',
         joint_positions=approach_ik.joint_positions,
@@ -168,15 +197,20 @@ def plan_single_scoop(
     ))
 
     # --- 3. DIG: at/below the target depth ---
-    dig_point = target - np.array([0, 0, scoop_depth])
-    dig_ik = solve_ik_nearest(
-        dig_point, bucket_angle_world=bucket_dig_angle, **ik_kwargs)
-    if not dig_ik.success:
+    # Try the full scoop_depth first; accept a shallower scoop if needed.
+    dig_result = _solve_with_fallback(
+        target[:2],
+        preferred_z=target[2] - scoop_depth,
+        min_z=target[2] - MIN_CLEARANCE,
+        bucket_angle=bucket_dig_angle,
+    )
+    if dig_result is None:
         return None
+    dig_ik, dig_target = dig_result
     waypoints.append(ScoopWaypoint(
         name='dig',
         joint_positions=dig_ik.joint_positions,
-        target_xyz=dig_point,
+        target_xyz=dig_target,
         duration=2.5,
     ))
 
@@ -192,17 +226,21 @@ def plan_single_scoop(
     waypoints.append(ScoopWaypoint(
         name='scoop',
         joint_positions=scoop_joints,
-        target_xyz=dig_point,
+        target_xyz=dig_target.copy(),
         duration=1.5,
     ))
 
     # --- 5. LIFT: raise the loaded bucket ---
-    # Use the dig bucket angle for the lift (more forgiving than the scoop angle)
-    lift_target = target + np.array([0, 0, lift_height])
-    lift_ik = solve_ik_nearest(
-        lift_target, bucket_angle_world=bucket_dig_angle, **ik_kwargs)
-    if not lift_ik.success:
+    # Try the ideal lift height first; fall back to lower heights.
+    lift_result = _solve_with_fallback(
+        target[:2],
+        preferred_z=target[2] + lift_height,
+        min_z=target[2] + MIN_CLEARANCE,
+        bucket_angle=bucket_dig_angle,
+    )
+    if lift_result is None:
         return None
+    lift_ik, lift_target = lift_result
     waypoints.append(ScoopWaypoint(
         name='lift',
         joint_positions=lift_ik.joint_positions,
