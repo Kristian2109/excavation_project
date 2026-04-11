@@ -104,6 +104,26 @@ def generate_launch_description():
         }],
     )
 
+    # Base motion node – drives base from start to working position
+    base_motion_node = Node(
+        package='excavation_world',
+        executable='base_motion_node',
+        name='base_motion',
+        output='screen',
+        parameters=[{
+            'start_x': 0.0,
+            'start_y': 0.0,
+            'start_yaw': 0.0,
+            'goal_x': 3.0,
+            'goal_y': 0.0,
+            'goal_yaw': 0.0,
+            'linear_speed': 0.5,
+            'angular_speed': 0.3,
+            'auto_start': True,
+            'use_sim_time': use_sim_time,
+        }],
+    )
+
     # Delay spawners so controller_manager has time to initialise
     delayed_spawners = TimerAction(
         period=3.0,
@@ -116,6 +136,7 @@ def generate_launch_description():
         robot_state_publisher,
         raw_urdf_publisher,
         controller_manager,
+        base_motion_node,
         delayed_spawners,
         foxglove_bridge,
     ])

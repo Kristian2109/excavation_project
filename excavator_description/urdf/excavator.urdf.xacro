@@ -44,10 +44,8 @@
     <color rgba="0.6 0.6 0.65 1.0"/>
   </material>
 
-  <!-- ===================== WORLD FRAME ========================== -->
-  <link name="world"/>
-
   <!-- ===================== BASE LINK ============================ -->
+  <!-- world → base_link transform is published dynamically by base_motion_node -->
   <link name="base_link">
     <visual>
       <geometry>
@@ -68,13 +66,6 @@
       <inertia ixx="500.0" ixy="0" ixz="0" iyy="500.0" iyz="0" izz="500.0"/>
     </inertial>
   </link>
-
-  <!-- Fixed joint from world to base (will be made movable later via ros2_control) -->
-  <joint name="base_joint" type="fixed">
-    <parent link="world"/>
-    <child  link="base_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
 
   <!-- ===================== CABIN (SWING) ======================== -->
   <link name="cabin_link">

@@ -49,6 +49,18 @@ def generate_launch_description():
             parameters=[{'use_sim_time': use_sim_time}],
         ),
 
+        # --- Base motion node (world → base_link TF) ---
+        Node(
+            package='excavation_world',
+            executable='base_motion_node',
+            name='base_motion',
+            output='screen',
+            parameters=[{
+                'auto_start': True,
+                'use_sim_time': use_sim_time,
+            }],
+        ),
+
         # --- Foxglove Bridge ---
         Node(
             package='foxglove_bridge',
