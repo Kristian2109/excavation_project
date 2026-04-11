@@ -9,6 +9,15 @@ Parameters (ROS):
     hole_depth           (double)                     target depth [m]
     publish_rate         (double, default 2.0)        Hz
     working_position_x/y/z/yaw (double)              predefined working position
+
+Subscriptions:
+    /excavation/apply_scoop  (ScoopAction)  – apply a scoop to the grid
+
+Published topics:
+    /excavation/markers           (MarkerArray)  – excavated cells
+    /excavation/target_markers    (MarkerArray)  – target volume
+    /excavation/working_position  (Marker)       – working position arrow
+    /excavation/grid_state        (ExcavationGrid) – volumetric state
 """
 
 import rclpy
@@ -19,7 +28,14 @@ from std_msgs.msg import Header, ColorRGBA
 from geometry_msgs.msg import Point, Pose, Quaternion, Vector3
 from visualization_msgs.msg import Marker, MarkerArray
 
+from excavation_msgs.msg import ScoopAction as ScoopActionMsg
+from excavation_msgs.msg import ExcavationGrid as ExcavationGridMsg
+
 from excavation_world.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
+from excavation_world.excavation_model import (
+    ScoopFootprint,
+    apply_scoop_to_grid,
+)
 
 import math
 import numpy as np
@@ -77,6 +93,13 @@ class WorldNode(Node):
             MarkerArray, '/excavation/target_markers', latching)
         self.work_pos_pub = self.create_publisher(
             Marker, '/excavation/working_position', latching)
+        self.grid_state_pub = self.create_publisher(
+            ExcavationGridMsg, '/excavation/grid_state', 10)
+
+        # --- Subscribers ---
+        self.create_subscription(
+            ScoopActionMsg, '/excavation/apply_scoop',
+            self._scoop_cb, 10)
 
         # --- Timer ---
         rate = self.get_parameter('publish_rate').value
@@ -92,6 +115,39 @@ class WorldNode(Node):
     # ------------------------------------------------------------------ #
     def _timer_cb(self) -> None:
         self._publish_excavation_markers()
+        self._publish_grid_state()
+
+    # ------------------------------------------------------------------ #
+    #  Scoop subscription callback
+    # ------------------------------------------------------------------ #
+    def _scoop_cb(self, msg: ScoopActionMsg) -> None:
+        """Apply a scoop received as a ScoopAction message.
+
+        The message may contain pre-computed ``affected_cell_indices`` (flat
+        indices).  If it does, those are used directly.  Otherwise, the scoop
+        is computed from the entry_pose position using the excavation model.
+        """
+        if len(msg.affected_cell_indices) > 0:
+            count = self.grid.excavate_flat_indices(
+                list(msg.affected_cell_indices))
+        else:
+            # Derive dig target from the entry_pose
+            p = msg.entry_pose.position
+            target = np.array([p.x, p.y, p.z])
+            result = apply_scoop_to_grid(
+                self.grid, target,
+                base_yaw=self.working_position['yaw'],
+                scoop_id=msg.scoop_id,
+            )
+            count = result.target_cells_removed
+
+        self.get_logger().info(
+            f'Scoop {msg.scoop_id}: removed {count} target cells, '
+            f'remaining={self.grid.remaining_target_cells}, '
+            f'completion={self.grid.completion_fraction:.1%}')
+        # Immediately update visualization
+        self._publish_excavation_markers()
+        self._publish_grid_state()
 
     # ------------------------------------------------------------------ #
     #  Marker publishers
@@ -195,6 +251,41 @@ class WorldNode(Node):
             f'Scoop applied: {count} new target cells excavated, '
             f'remaining={self.grid.remaining_target_cells}')
         return count
+
+    def apply_scoop_at(self, dig_target_xyz, base_yaw=0.0, cabin_angle=0.0,
+                       footprint=None, scoop_id=0):
+        """Apply a scoop via the excavation model (world-frame target)."""
+        result = apply_scoop_to_grid(
+            self.grid, np.asarray(dig_target_xyz),
+            base_yaw=base_yaw, cabin_angle=cabin_angle,
+            footprint=footprint, scoop_id=scoop_id,
+        )
+        self.get_logger().info(
+            f'Scoop {scoop_id}: removed {result.target_cells_removed} target cells, '
+            f'remaining={result.remaining_target_cells}, '
+            f'completion={result.completion_fraction:.1%}')
+        self._publish_excavation_markers()
+        self._publish_grid_state()
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  Grid state publisher
+    # ------------------------------------------------------------------ #
+    def _publish_grid_state(self) -> None:
+        """Publish the current grid summary as an ExcavationGrid message."""
+        msg = ExcavationGridMsg()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'world'
+        msg.resolution = self.grid.resolution
+        msg.size_x, msg.size_y, msg.size_z = self.grid.shape
+        gx, gy, gz = self.grid.grid_origin
+        msg.origin = Point(x=gx, y=gy, z=gz)
+        msg.total_cells = self.grid.total_target_cells
+        msg.excavated_cells = self.grid.excavated_target_cells
+        msg.remaining_cells = self.grid.remaining_target_cells
+        msg.remaining_volume = self.grid.remaining_volume
+        msg.completion_fraction = self.grid.completion_fraction
+        self.grid_state_pub.publish(msg)
 
 
 def main(args=None):

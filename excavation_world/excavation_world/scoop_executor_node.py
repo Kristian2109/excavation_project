@@ -25,9 +25,12 @@ from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 
 from std_msgs.msg import String, Float32
+from geometry_msgs.msg import Pose, Point, Quaternion
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.action import FollowJointTrajectory
 from builtin_interfaces.msg import Duration
+
+from excavation_msgs.msg import ScoopAction as ScoopActionMsg
 
 import numpy as np
 
@@ -57,6 +60,8 @@ class ScoopExecutorNode(Node):
         # Publishers
         self.status_pub = self.create_publisher(String, '/scoop_executor/status', 10)
         self.progress_pub = self.create_publisher(Float32, '/scoop_executor/progress', 10)
+        self.scoop_action_pub = self.create_publisher(
+            ScoopActionMsg, '/excavation/apply_scoop', 10)
 
         # Action client for arm_controller
         self._cb_group = ReentrantCallbackGroup()
@@ -139,11 +144,38 @@ class ScoopExecutorNode(Node):
         if result.status == 4:  # SUCCEEDED
             self._publish_status(f'Scoop {trajectory.scoop_id} complete')
             self._publish_progress(1.0)
+            # Notify the world node to update the grid
+            self._publish_scoop_action(trajectory)
             return True
         else:
             self._publish_status(
                 f'Scoop {trajectory.scoop_id} failed (status={result.status})')
             return False
+
+    def _publish_scoop_action(self, trajectory: ScoopTrajectory) -> None:
+        """Publish a ScoopAction so the world_node updates the grid."""
+        msg = ScoopActionMsg()
+        msg.scoop_id = trajectory.scoop_id
+
+        # Set entry_pose from the 'dig' waypoint target
+        dig_wp = None
+        for wp in trajectory.waypoints:
+            if wp.name == 'dig' and wp.target_xyz is not None:
+                dig_wp = wp
+                break
+        if dig_wp is not None:
+            msg.entry_pose = Pose(
+                position=Point(
+                    x=float(dig_wp.target_xyz[0]),
+                    y=float(dig_wp.target_xyz[1]),
+                    z=float(dig_wp.target_xyz[2]),
+                ),
+                orientation=Quaternion(w=1.0),
+            )
+
+        self.scoop_action_pub.publish(msg)
+        self.get_logger().info(
+            f'Published ScoopAction for scoop {trajectory.scoop_id}')
 
     def plan_and_execute(
         self,
