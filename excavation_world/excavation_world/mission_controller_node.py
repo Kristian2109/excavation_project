@@ -31,7 +31,6 @@ Parameters
 
 from __future__ import annotations
 
-import math
 import time
 
 import rclpy
@@ -51,8 +50,6 @@ from excavation_msgs.msg import (
     MissionStatus as MissionStatusMsg,
     ScoopAction as ScoopActionMsg,
 )
-
-import numpy as np
 
 from excavation_world.mission_controller import (
     MissionController,
@@ -77,9 +74,9 @@ class MissionControllerNode(Node):
         self.declare_parameter('hole_origin_x', 5.0)
         self.declare_parameter('hole_origin_y', -2.0)
         self.declare_parameter('hole_origin_z', 0.0)
-        self.declare_parameter('hole_size_x', 4.0)
-        self.declare_parameter('hole_size_y', 3.0)
-        self.declare_parameter('hole_depth', 2.0)
+        self.declare_parameter('hole_size_x', 1.0)
+        self.declare_parameter('hole_size_y', 1.0)
+        self.declare_parameter('hole_depth', 1.0)
         self.declare_parameter('resolution', 0.25)
         self.declare_parameter('base_x', 2.0)
         self.declare_parameter('base_y', -0.5)

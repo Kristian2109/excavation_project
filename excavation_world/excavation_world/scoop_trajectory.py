@@ -24,9 +24,7 @@ from typing import List, Optional
 import numpy as np
 
 from excavation_world.ik_solver import (
-    IKResult,
     solve_ik_nearest,
-    verify_ik_solution,
 )
 from excavation_world.robot_model import ExcavatorModel, JOINT_NAMES
 

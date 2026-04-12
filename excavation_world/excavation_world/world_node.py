@@ -22,9 +22,9 @@ Published topics:
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, DurabilityPolicy
+from rclpy.qos import QoSProfile
 
-from std_msgs.msg import Header, ColorRGBA
+from std_msgs.msg import ColorRGBA
 from geometry_msgs.msg import Point, Pose, Quaternion, Vector3, TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from tf2_ros import StaticTransformBroadcaster
@@ -34,7 +34,6 @@ from excavation_msgs.msg import ExcavationGrid as ExcavationGridMsg
 
 from excavation_world.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
 from excavation_world.excavation_model import (
-    ScoopFootprint,
     apply_scoop_to_grid,
 )
 
@@ -53,9 +52,9 @@ class WorldNode(Node):
         self.declare_parameter('hole_origin_x', 5.0)
         self.declare_parameter('hole_origin_y', -2.0)
         self.declare_parameter('hole_origin_z', 0.0)
-        self.declare_parameter('hole_size_x', 4.0)
-        self.declare_parameter('hole_size_y', 3.0)
-        self.declare_parameter('hole_depth', 2.0)
+        self.declare_parameter('hole_size_x', 1.0)
+        self.declare_parameter('hole_size_y', 1.0)
+        self.declare_parameter('hole_depth', 1.0)
         self.declare_parameter('publish_rate', 2.0)
         self.declare_parameter('working_position_x', 2.0)
         self.declare_parameter('working_position_y', -0.5)

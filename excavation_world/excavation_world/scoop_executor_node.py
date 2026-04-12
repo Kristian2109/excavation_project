@@ -16,7 +16,6 @@ Parameters:
     base_x, base_y, base_yaw  – current base pose
 """
 
-import math
 import time
 
 import rclpy
@@ -36,7 +35,6 @@ import numpy as np
 
 from excavation_world.scoop_trajectory import (
     ScoopTrajectory,
-    ScoopWaypoint,
     plan_single_scoop,
 )
 from excavation_world.robot_model import JOINT_NAMES

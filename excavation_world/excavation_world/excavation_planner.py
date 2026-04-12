@@ -34,9 +34,7 @@ from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
 from excavation_world.excavation_model import (
     ScoopFootprint,
     compute_scoop_cells,
-    apply_scoop_to_grid,
 )
-from excavation_world.ik_solver import check_reachability
 from excavation_world.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,

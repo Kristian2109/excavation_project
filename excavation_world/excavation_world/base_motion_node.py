@@ -37,7 +37,6 @@ from tf2_ros import TransformBroadcaster
 from excavation_world.base_planner import (
     BasePose,
     plan_base_trajectory,
-    BaseTrajectory,
 )
 
 

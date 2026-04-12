@@ -19,16 +19,9 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_world.robot_model import (
-    ExcavatorModel,
-    BUCKET_LENGTH,
-    BUCKET_DEPTH,
-)
+from excavation_world.excavation_grid import ExcavationGrid
 from excavation_world.scoop_trajectory import (
     ScoopTrajectory,
-    ScoopWaypoint,
-    plan_single_scoop,
 )
 
 
