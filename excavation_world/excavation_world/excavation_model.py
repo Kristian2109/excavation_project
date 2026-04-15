@@ -153,37 +153,6 @@ def compute_scoop_cells(
     return affected
 
 
-def compute_scoop_cells_from_trajectory(
-    grid: ExcavationGrid,
-    trajectory: ScoopTrajectory,
-    base_x: float = 0.0,
-    base_y: float = 0.0,
-    base_yaw: float = 0.0,
-    footprint: Optional[ScoopFootprint] = None,
-) -> List[Tuple[int, int, int]]:
-    """Extract the dig target from a trajectory and compute affected cells.
-
-    Uses the 'dig' waypoint's ``target_xyz`` and the cabin angle from its
-    joint positions.
-    """
-    dig_wp = None
-    for wp in trajectory.waypoints:
-        if wp.name == 'dig':
-            dig_wp = wp
-            break
-
-    if dig_wp is None or dig_wp.target_xyz is None:
-        return []
-
-    cabin_angle = float(dig_wp.joint_positions[0])
-    return compute_scoop_cells(
-        grid, dig_wp.target_xyz,
-        base_yaw=base_yaw,
-        cabin_angle=cabin_angle,
-        footprint=footprint,
-    )
-
-
 # ====================================================================== #
 #  Apply scoop to grid
 # ====================================================================== #
@@ -239,42 +208,4 @@ def apply_scoop_to_grid(
         target_cells_removed=target_removed,
         remaining_target_cells=grid.remaining_target_cells,
         completion_fraction=grid.completion_fraction,
-    )
-
-
-def apply_trajectory_to_grid(
-    grid: ExcavationGrid,
-    trajectory: ScoopTrajectory,
-    base_x: float = 0.0,
-    base_y: float = 0.0,
-    base_yaw: float = 0.0,
-    footprint: Optional[ScoopFootprint] = None,
-) -> ScoopResult:
-    """Apply a scoop trajectory to the grid.
-
-    Extracts the dig target and cabin angle from the trajectory's 'dig'
-    waypoint and delegates to :func:`apply_scoop_to_grid`.
-    """
-    dig_wp = None
-    for wp in trajectory.waypoints:
-        if wp.name == 'dig':
-            dig_wp = wp
-            break
-
-    if dig_wp is None or dig_wp.target_xyz is None:
-        return ScoopResult(
-            scoop_id=trajectory.scoop_id,
-            cells_affected=0,
-            target_cells_removed=0,
-            remaining_target_cells=grid.remaining_target_cells,
-            completion_fraction=grid.completion_fraction,
-        )
-
-    cabin_angle = float(dig_wp.joint_positions[0])
-    return apply_scoop_to_grid(
-        grid, dig_wp.target_xyz,
-        base_yaw=base_yaw,
-        cabin_angle=cabin_angle,
-        footprint=footprint,
-        scoop_id=trajectory.scoop_id,
     )

@@ -19,9 +19,7 @@ import pytest
 
 from excavation_world.scoop_trajectory import (
     ScoopTrajectory,
-    ScoopWaypoint,
     plan_single_scoop,
-    plan_scoop_sequence,
     READY_JOINTS,
 )
 from excavation_world.ik_solver import verify_ik_solution, IKResult, IKStatus
@@ -176,38 +174,6 @@ class TestUnreachable:
         target = np.array([-5.0, 0.0, 0.0])
         traj = plan_single_scoop(target, base_x=BASE_X)
         assert traj is None
-
-
-# ====================================================================== #
-#  Scoop sequence
-# ====================================================================== #
-
-class TestScoopSequence:
-    def test_sequence_planning(self):
-        targets = [
-            np.array([7.0, -1.0, -0.3]),
-            np.array([7.5, -2.0, -0.5]),
-            np.array([8.0, -1.5, -0.3]),
-        ]
-        trajectories = plan_scoop_sequence(targets, base_x=BASE_X)
-        assert len(trajectories) >= 2  # at least most should succeed
-        for i, traj in enumerate(trajectories):
-            assert traj.validate()
-            assert traj.scoop_id == i or traj.scoop_id >= 0
-
-    def test_sequence_ids(self):
-        targets = [
-            np.array([7.0, -1.0, -0.3]),
-            np.array([7.5, -2.0, -0.3]),
-        ]
-        trajectories = plan_scoop_sequence(targets, base_x=BASE_X)
-        for i, traj in enumerate(trajectories):
-            assert traj.scoop_id == i
-
-    def test_empty_sequence(self):
-        trajectories = plan_scoop_sequence([], base_x=BASE_X)
-        assert trajectories == []
-
 
 # ====================================================================== #
 #  No large joint jumps

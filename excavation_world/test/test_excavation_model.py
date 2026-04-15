@@ -11,29 +11,22 @@ Covers:
   - Off-target scoop removes zero target cells
   - Multiple scoops progressively reduce remaining volume
   - ScoopResult fields are consistent
-  - compute_scoop_cells_from_trajectory works with a real trajectory
-  - apply_trajectory_to_grid works end-to-end
   - Rotated base/cabin produces a rotated scoop footprint
   - Full coverage: enough scoops can empty the entire target
 """
 
-import math
 import numpy as np
 import pytest
 
 from excavation_world.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
 from excavation_world.excavation_model import (
     ScoopFootprint,
-    ScoopResult,
     compute_scoop_cells,
-    compute_scoop_cells_from_trajectory,
     apply_scoop_to_grid,
-    apply_trajectory_to_grid,
 )
 from excavation_world.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
-    plan_scoop_sequence,
 )
 
 
@@ -217,52 +210,6 @@ class TestProgressiveExcavation:
             result = apply_scoop_to_grid(grid, t, scoop_id=i)
             assert result.completion_fraction >= prev_frac
             prev_frac = result.completion_fraction
-
-
-# ====================================================================== #
-#  Scoop with trajectory
-# ====================================================================== #
-
-class TestTrajectoryIntegration:
-    """Verify that apply_trajectory_to_grid works end-to-end."""
-
-    def test_apply_trajectory_removes_cells(self):
-        grid = _make_grid()
-        target = np.array([7.0, -1.0, -0.3])
-        traj = plan_single_scoop(target, base_x=BASE_X)
-        assert traj is not None
-        before = grid.remaining_target_cells
-        result = apply_trajectory_to_grid(
-            grid, traj, base_x=BASE_X, base_y=BASE_Y, base_yaw=BASE_YAW)
-        assert result.target_cells_removed > 0
-        assert grid.remaining_target_cells < before
-
-    def test_compute_cells_from_trajectory(self):
-        grid = _make_grid()
-        target = np.array([7.0, -1.0, -0.3])
-        traj = plan_single_scoop(target, base_x=BASE_X)
-        assert traj is not None
-        cells = compute_scoop_cells_from_trajectory(
-            grid, traj, base_x=BASE_X, base_y=BASE_Y, base_yaw=BASE_YAW)
-        assert len(cells) > 0
-
-    def test_no_dig_waypoint_returns_zero(self):
-        """A trajectory without a 'dig' waypoint should remove nothing."""
-        grid = _make_grid()
-        # Fabricate a fake trajectory with no dig waypoint
-        from excavation_world.scoop_trajectory import ScoopWaypoint
-        fake_traj = ScoopTrajectory(
-            waypoints=[
-                ScoopWaypoint(name='ready_start',
-                              joint_positions=np.zeros(4)),
-                ScoopWaypoint(name='ready_end',
-                              joint_positions=np.zeros(4)),
-            ],
-            scoop_id=99,
-        )
-        result = apply_trajectory_to_grid(grid, fake_traj)
-        assert result.cells_affected == 0
-        assert result.target_cells_removed == 0
 
 
 # ====================================================================== #

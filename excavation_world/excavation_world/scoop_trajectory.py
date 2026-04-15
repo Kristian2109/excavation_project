@@ -255,26 +255,3 @@ def plan_single_scoop(
 
     traj = ScoopTrajectory(waypoints=waypoints, scoop_id=scoop_id)
     return traj if traj.validate() else None
-
-
-def plan_scoop_sequence(
-    dig_targets: List[np.ndarray],
-    base_x: float = 0.0,
-    base_y: float = 0.0,
-    base_yaw: float = 0.0,
-    **kwargs,
-) -> List[ScoopTrajectory]:
-    """Plan a sequence of scoops for a list of dig targets.
-
-    Returns a list of ScoopTrajectory objects, one per target.
-    Targets that fail IK are skipped (not included in output).
-    """
-    trajectories = []
-    for i, target in enumerate(dig_targets):
-        traj = plan_single_scoop(
-            target, base_x=base_x, base_y=base_y, base_yaw=base_yaw,
-            scoop_id=i, **kwargs,
-        )
-        if traj is not None:
-            trajectories.append(traj)
-    return trajectories

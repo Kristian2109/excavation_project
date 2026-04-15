@@ -25,7 +25,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile
 
 from std_msgs.msg import ColorRGBA
-from geometry_msgs.msg import Point, Pose, Quaternion, Vector3
+from geometry_msgs.msg import Point
 from sensor_msgs.msg import JointState
 from visualization_msgs.msg import Marker, MarkerArray
 
