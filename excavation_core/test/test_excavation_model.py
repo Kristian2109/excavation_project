@@ -16,17 +16,12 @@ Covers:
 """
 
 import numpy as np
-import pytest
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
-from excavation_world.excavation_model import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
+from excavation_core.excavation_model import (
     ScoopFootprint,
     compute_scoop_cells,
     apply_scoop_to_grid,
-)
-from excavation_world.scoop_trajectory import (
-    ScoopTrajectory,
-    plan_single_scoop,
 )
 
 

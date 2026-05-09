@@ -13,17 +13,15 @@ Covers:
   - Duration and total_duration consistency
 """
 
-import math
 import numpy as np
 import pytest
 
-from excavation_world.scoop_trajectory import (
+from excavation_core.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
     READY_JOINTS,
 )
-from excavation_world.ik_solver import verify_ik_solution, IKResult, IKStatus
-from excavation_world.robot_model import ExcavatorModel, JOINT_NAMES
+from excavation_core.robot_model import ExcavatorModel, JOINT_NAMES
 
 
 # ====================================================================== #

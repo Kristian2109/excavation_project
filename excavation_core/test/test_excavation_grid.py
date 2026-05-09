@@ -8,11 +8,9 @@ Maps to the Key Tests Checklist:
 import pytest
 import numpy as np
 
-from excavation_world.excavation_grid import (
+from excavation_core.excavation_grid import (
     ExcavationGrid,
     HoleSpec,
-    UNEXCAVATED,
-    EXCAVATED,
 )
 
 

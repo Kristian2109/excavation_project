@@ -2,8 +2,8 @@
 Tests for mission_controller.py – the ROS-free state machine.
 
 Run:
-    cd /root/ws && colcon build --packages-select excavation_world --symlink-install
-    cd /root/ws/src/excavation_project/excavation_world
+    cd /root/ws && colcon build --packages-select excavation_core --symlink-install
+    cd /root/ws/src/excavation_project/excavation_core
     python -m pytest test/test_mission_controller.py -v
 """
 
@@ -14,10 +14,10 @@ from typing import Optional
 import numpy as np
 import pytest
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_world.excavation_model import ScoopFootprint
-from excavation_world.excavation_planner import ExcavationPlan, PlannedScoop
-from excavation_world.mission_controller import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
+from excavation_core.excavation_model import ScoopFootprint
+from excavation_core.excavation_planner import ExcavationPlan, PlannedScoop
+from excavation_core.mission_controller import (
     MissionController,
     MissionProgress,
     MissionState,

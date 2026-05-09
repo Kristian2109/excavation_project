@@ -26,9 +26,9 @@ import math
 import numpy as np
 import pytest
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_world.excavation_model import ScoopFootprint
-from excavation_world.excavation_planner import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
+from excavation_core.excavation_model import ScoopFootprint
+from excavation_core.excavation_planner import (
     ExcavationPlan,
     PlannedScoop,
     plan_excavation,

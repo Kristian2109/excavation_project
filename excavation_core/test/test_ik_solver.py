@@ -17,7 +17,7 @@ import math
 import numpy as np
 import pytest
 
-from excavation_world.ik_solver import (
+from excavation_core.ik_solver import (
     IKResult,
     IKStatus,
     check_reachability,
@@ -29,7 +29,7 @@ from excavation_world.ik_solver import (
     L1,
     L2,
 )
-from excavation_world.robot_model import ExcavatorModel, JOINT_NAMES
+from excavation_core.robot_model import ExcavatorModel, JOINT_NAMES
 
 
 # ====================================================================== #

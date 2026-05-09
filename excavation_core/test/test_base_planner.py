@@ -7,12 +7,10 @@ Maps to Key Tests Checklist:
 
 import math
 import pytest
-import numpy as np
 
-from excavation_world.base_planner import (
+from excavation_core.base_planner import (
     BasePose,
     BaseTrajectory,
-    TrajectoryPoint,
     plan_base_trajectory,
     _wrap_angle,
 )
@@ -36,6 +34,11 @@ def goal() -> BasePose:
 @pytest.fixture
 def trajectory(start, goal) -> BaseTrajectory:
     return plan_base_trajectory(start, goal)
+
+
+def test_trajectory_not_empty(trajectory: BaseTrajectory):
+    """Convenience selector for direct single-test invocation."""
+    assert len(trajectory.points) > 0
 
 
 # --------------------------------------------------------------------- #

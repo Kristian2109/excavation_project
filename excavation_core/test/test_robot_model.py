@@ -9,7 +9,7 @@ import math
 import pytest
 import numpy as np
 
-from excavation_world.robot_model import (
+from excavation_core.robot_model import (
     ExcavatorModel,
     JOINT_NAMES,
     CHASSIS_HEIGHT,
