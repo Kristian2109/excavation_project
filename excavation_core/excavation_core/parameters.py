@@ -34,13 +34,13 @@ PRM_HOLE_ORIGIN_Z = 'hole_origin_z'
 DEFAULT_HOLE_ORIGIN_Z = 0.0
 
 PRM_HOLE_SIZE_X = 'hole_size_x'
-DEFAULT_HOLE_SIZE_X = 1.0
+DEFAULT_HOLE_SIZE_X = 2.0
 
 PRM_HOLE_SIZE_Y = 'hole_size_y'
-DEFAULT_HOLE_SIZE_Y = 1.0
+DEFAULT_HOLE_SIZE_Y = 2.0
 
 PRM_HOLE_DEPTH = 'hole_depth'
-DEFAULT_HOLE_DEPTH = 1.0
+DEFAULT_HOLE_DEPTH = 4.0
 
 # ============================================================================
 #  WORLD NODE SPECIFIC
@@ -80,9 +80,6 @@ DEFAULT_AUTO_START = True
 
 PRM_SCOOP_DELAY = 'scoop_delay'
 DEFAULT_SCOOP_DELAY = 0.5
-
-PRM_ARM_TIMEOUT = 'arm_timeout'
-DEFAULT_ARM_TIMEOUT = 30.0
 
 # ============================================================================
 #  DEBUG VISUALIZER SPECIFIC
@@ -142,7 +139,6 @@ class MissionControllerNodeParameters:
     execute_arm: bool
     auto_start: bool
     scoop_delay: float
-    arm_timeout: float
 
 
 @dataclass
@@ -198,7 +194,6 @@ def declare_mission_controller_node_parameters(node: Node) -> None:
     node.declare_parameter(PRM_EXECUTE_ARM, DEFAULT_EXECUTE_ARM)
     node.declare_parameter(PRM_AUTO_START, DEFAULT_AUTO_START)
     node.declare_parameter(PRM_SCOOP_DELAY, DEFAULT_SCOOP_DELAY)
-    node.declare_parameter(PRM_ARM_TIMEOUT, DEFAULT_ARM_TIMEOUT)
 
 
 def declare_debug_visualizer_node_parameters(node: Node) -> None:
@@ -276,7 +271,6 @@ def retrieve_mission_controller_node_parameters(node: Node) -> MissionController
         execute_arm=bool(_get_param(node, PRM_EXECUTE_ARM)),
         auto_start=bool(_get_param(node, PRM_AUTO_START)),
         scoop_delay=float(_get_param(node, PRM_SCOOP_DELAY)),
-        arm_timeout=float(_get_param(node, PRM_ARM_TIMEOUT)),
     )
 
 

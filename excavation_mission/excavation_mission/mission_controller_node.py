@@ -25,8 +25,6 @@ Parameters
         Immediately start the mission (base motion already running).
     scoop_delay (float, default 0.5)
         Minimum seconds between consecutive scoops (headless mode only).
-    arm_timeout (float, default 30.0)
-        Seconds to wait for arm controller action server at startup.
 """
 
 from __future__ import annotations
@@ -103,7 +101,6 @@ class MissionControllerNode(Node):
         # ----- Cache mission parameters -----
         self._execute_arm = params.execute_arm
         self._scoop_delay = params.scoop_delay
-        self._arm_timeout = params.arm_timeout
 
         # ----- Scoop execution tracking -----
         self._scoop_active = False

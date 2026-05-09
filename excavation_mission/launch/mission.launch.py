@@ -31,19 +31,13 @@ from excavation_core.parameters import (
     PRM_HOLE_DEPTH,
     DEFAULT_HOLE_DEPTH,
     PRM_BASE_X,
-    DEFAULT_BASE_X,
     PRM_BASE_Y,
-    DEFAULT_BASE_Y,
     PRM_BASE_YAW,
-    DEFAULT_BASE_YAW,
     PRM_EXECUTE_ARM,
-    DEFAULT_EXECUTE_ARM,
     PRM_AUTO_START,
     DEFAULT_AUTO_START,
     PRM_SCOOP_DELAY,
     DEFAULT_SCOOP_DELAY,
-    PRM_ARM_TIMEOUT,
-    DEFAULT_ARM_TIMEOUT,
 )
 
 
@@ -73,7 +67,6 @@ def generate_launch_description():
             PRM_EXECUTE_ARM: execute_arm,
             PRM_AUTO_START: DEFAULT_AUTO_START,
             PRM_SCOOP_DELAY: DEFAULT_SCOOP_DELAY,
-            PRM_ARM_TIMEOUT: DEFAULT_ARM_TIMEOUT,
             'use_sim_time': use_sim_time,
         }],
     )
