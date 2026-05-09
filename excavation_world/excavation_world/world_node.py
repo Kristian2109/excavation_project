@@ -37,6 +37,7 @@ from excavation_core.excavation_model import (
     apply_scoop_to_grid,
 )
 from excavation_core.ik_solver import solve_ik_nearest
+from excavation_core.position_planner import compute_work_positions
 from excavation_core.parameters import (
     declare_world_node_parameters,
     retrieve_world_node_parameters,
@@ -73,11 +74,20 @@ class WorldNode(Node):
 
         # --- Cache working position & hole geometry for later use ---
         self._params = params
+        self._hole = hole
+
+        # Compute work positions from hole geometry
+        self._work_positions = compute_work_positions(hole)
+        self.get_logger().info(
+            f'Computed {len(self._work_positions)} work position(s)')
+
+        # Use first position for reachability scanning
+        first_pos = self._work_positions[0]
         self.working_position = {
-            'x': params.working_position.working_position_x,
-            'y': params.working_position.working_position_y,
-            'z': params.working_position.working_position_z,
-            'yaw': params.working_position.working_position_yaw,
+            'x': first_pos.x,
+            'y': first_pos.y,
+            'z': 0.0,
+            'yaw': first_pos.yaw,
         }
         self._target_point_by_flat: dict[int, Point] = {}
         self._target_reachable_by_flat: dict[int, bool] = {}
@@ -411,31 +421,33 @@ class WorldNode(Node):
         self.marker_pub.publish(ma)
 
     def _publish_working_position(self) -> None:
-        """Publish an arrow marker at the predefined working position."""
-        m = Marker()
-        m.header.frame_id = 'world'
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = 'working_position'
-        m.id = 0
-        m.type = Marker.ARROW
-        m.action = Marker.ADD
-        m.scale = Vector3(x=1.5, y=0.3, z=0.3)
-        m.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=0.8)
+        """Publish arrow markers at all computed working positions."""
+        now = self.get_clock().now().to_msg()
+        for i, pos in enumerate(self._work_positions):
+            m = Marker()
+            m.header.frame_id = 'world'
+            m.header.stamp = now
+            m.ns = 'working_position'
+            m.id = i
+            m.type = Marker.ARROW
+            m.action = Marker.ADD
+            m.scale = Vector3(x=1.5, y=0.3, z=0.3)
+            # First position: green, others: cyan
+            if i == 0:
+                m.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=0.8)
+            else:
+                m.color = ColorRGBA(r=0.0, g=0.8, b=1.0, a=0.6)
 
-        yaw = self.working_position['yaw']
-        m.pose = Pose(
-            position=Point(
-                x=self.working_position['x'],
-                y=self.working_position['y'],
-                z=self.working_position['z'] + 0.5,
-            ),
-            orientation=Quaternion(
-                x=0.0, y=0.0,
-                z=math.sin(yaw / 2.0),
-                w=math.cos(yaw / 2.0),
-            ),
-        )
-        self.work_pos_pub.publish(m)
+            yaw = pos.yaw
+            m.pose = Pose(
+                position=Point(x=pos.x, y=pos.y, z=0.5),
+                orientation=Quaternion(
+                    x=0.0, y=0.0,
+                    z=math.sin(yaw / 2.0),
+                    w=math.cos(yaw / 2.0),
+                ),
+            )
+            self.work_pos_pub.publish(m)
 
 
     # ------------------------------------------------------------------ #

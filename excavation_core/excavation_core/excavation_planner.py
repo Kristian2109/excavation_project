@@ -232,8 +232,13 @@ def plan_excavation(
                     reachable=reachable,
                 )
 
-                # Only include scoops that affect cells
-                if len(cells) > 0:
+                # Only include scoops that affect unexcavated cells.
+                # Skip scoops where every affected cell is already dug.
+                unexcavated = [
+                    c for c in cells
+                    if not grid.is_excavated(c[0], c[1], c[2])
+                ]
+                if len(unexcavated) > 0:
                     plan.scoops.append(planned)
                     scoop_id += 1
 

@@ -63,16 +63,19 @@ class BaseMotionNode(Node):
         self.declare_parameter('angular_speed', 0.3)
         self.declare_parameter('publish_rate', 20.0)
         self.declare_parameter('auto_start', True)
+        self.declare_parameter('speed_multiplier', 1.0)
 
         def _f(name: str) -> float:
             return float(self.get_parameter(name).value)
 
+        speed_mult = max(0.1, _f('speed_multiplier'))
+
         start = BasePose(x=_f('start_x'), y=_f('start_y'), yaw=_f('start_yaw'))
         goal = BasePose(x=_f('goal_x'), y=_f('goal_y'), yaw=_f('goal_yaw'))
 
-        # --- Speed settings (cached for re-planning) ---
-        self.linear_speed = _f('linear_speed')
-        self.angular_speed = _f('angular_speed')
+        # --- Speed settings (cached for re-planning), scaled by multiplier ---
+        self.linear_speed = _f('linear_speed') * speed_mult
+        self.angular_speed = _f('angular_speed') * speed_mult
 
         # --- Plan trajectory ---
         self.trajectory = plan_base_trajectory(
@@ -96,7 +99,9 @@ class BaseMotionNode(Node):
         # --- Publishers ---
         latching = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_pub = self.create_publisher(Path, '/base_motion/path', latching)
-        self.done_pub = self.create_publisher(Bool, '/base_motion/done', 10)
+        self.done_pub = self.create_publisher(
+            Bool, '/base_motion/done',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 
         # --- Subscriber for runtime goal updates from Foxglove ---
         self.create_subscription(
@@ -123,6 +128,10 @@ class BaseMotionNode(Node):
         self.running = True
         self.done = False
         self.t_start = self.get_clock().now()
+        # Immediately notify subscribers that motion is in progress
+        msg = Bool()
+        msg.data = False
+        self.done_pub.publish(msg)
         self.get_logger().info('Base motion started')
 
     # ------------------------------------------------------------------ #
@@ -130,6 +139,13 @@ class BaseMotionNode(Node):
     # ------------------------------------------------------------------ #
     def _goal_pose_cb(self, msg: PoseStamped) -> None:
         """Re-plan trajectory from current position to clicked goal."""
+        # Immediately clear done so stale done=True stops being latched
+        self.done = False
+        self.running = False
+        done_msg = Bool()
+        done_msg.data = False
+        self.done_pub.publish(done_msg)
+
         # Extract yaw from quaternion
         q = msg.pose.orientation
         yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
@@ -170,17 +186,14 @@ class BaseMotionNode(Node):
                 self.done = True
                 self.running = False
                 self.current_pose = self.trajectory.end_pose
+                # Publish done=True once (latched via TRANSIENT_LOCAL)
+                done_msg = Bool()
+                done_msg.data = True
+                self.done_pub.publish(done_msg)
                 self.get_logger().info(
                     f'Base motion complete. Final pose: '
                     f'({self.current_pose.x:.2f}, {self.current_pose.y:.2f}, '
                     f'yaw={math.degrees(self.current_pose.yaw):.1f}°)')
-
-        # Keep re-publishing done=True so late-starting subscribers
-        # (e.g. mission_controller_node) don't miss it.
-        if self.done:
-            msg = Bool()
-            msg.data = True
-            self.done_pub.publish(msg)
 
         # Always publish TF so the robot has a valid world→base_link
         self._publish_tf()

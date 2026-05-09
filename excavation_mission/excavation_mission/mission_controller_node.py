@@ -33,15 +33,17 @@ Parameters
 from __future__ import annotations
 
 import time
+import math
 
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.qos import QoSProfile
+from rclpy.qos import QoSProfile, DurabilityPolicy
 
 from std_msgs.msg import Bool, ColorRGBA
 from geometry_msgs.msg import Pose, Point, Quaternion, Vector3
+from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.action import FollowJointTrajectory
 from builtin_interfaces.msg import Duration
@@ -63,6 +65,8 @@ from excavation_core.scoop_trajectory import (
     plan_single_scoop,
 )
 from excavation_core.robot_model import JOINT_NAMES, ExcavatorModel
+from excavation_core.position_planner import compute_work_positions
+from excavation_core.base_planner import BasePose
 from excavation_core.parameters import (
     declare_mission_controller_node_parameters,
     retrieve_mission_controller_node_parameters,
@@ -94,11 +98,25 @@ class MissionControllerNode(Node):
         grid = ExcavationGrid.from_hole_spec(hole, resolution=params.hole_geometry.resolution)
 
         # ----- State machine -----
+        # Compute working positions from hole geometry.
+        # If base_x/y/yaw were explicitly set to non-default values,
+        # use that single position.  Otherwise auto-compute from hole.
+        param_base_x = params.base_position.base_x
+        param_base_y = params.base_position.base_y
+        param_base_yaw = params.base_position.base_yaw
+
+        work_positions = compute_work_positions(hole)
+
+        self.get_logger().info(
+            f'Computed {len(work_positions)} work position(s): '
+            + ', '.join(
+                f'({p.x:.2f}, {p.y:.2f}, yaw={math.degrees(p.yaw):.0f}°)'
+                for p in work_positions
+            ))
+
         self.controller = MissionController(
             hole=hole, grid=grid,
-            base_x=params.base_position.base_x,
-            base_y=params.base_position.base_y,
-            base_yaw=params.base_position.base_yaw,
+            work_positions=work_positions,
         )
 
         # ----- Cache mission parameters -----
@@ -128,7 +146,12 @@ class MissionControllerNode(Node):
 
         # ----- Subscriber: base motion done -----
         self.create_subscription(
-            Bool, '/base_motion/done', self._base_done_cb, 10)
+            Bool, '/base_motion/done', self._base_done_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+
+        # ----- Publisher: command base motion to a new goal -----
+        self._goal_pub = self.create_publisher(
+            PoseStamped, '/goal_pose', 10)
 
         # ----- Action client for arm (only if needed) -----
         self._action_client = None
@@ -168,6 +191,9 @@ class MissionControllerNode(Node):
             if time.monotonic() - self._last_scoop_time >= effective_delay:
                 self._advance_excavation()
 
+        elif state == MissionState.RELOCATING:
+            self._do_relocate()
+
         self._publish_status()
 
     # ------------------------------------------------------------------ #
@@ -176,16 +202,58 @@ class MissionControllerNode(Node):
     def _base_done_cb(self, msg: Bool) -> None:
         if not msg.data:
             return
-        if self.controller.state != MissionState.MOVING_TO_WORK_POS:
+        if self.controller.state == MissionState.MOVING_TO_WORK_POS:
+            pass  # initial motion — accept
+        elif (self.controller.state == MissionState.RELOCATING
+              and self._relocate_sent):
+            pass  # relocation goal was sent — accept
+        else:
             return
-        self.get_logger().info('Base motion complete → PLANNING')
+        pos = self.controller.current_work_position
+        self.get_logger().info(
+            f'Base arrived at position {self.controller._position_index + 1}'
+            f'/{len(self.controller.work_positions)} '
+            f'({pos.x:.2f}, {pos.y:.2f}) → PLANNING')
         self.controller.on_base_arrived()
         self._publish_status()
+
+    # ------------------------------------------------------------------ #
+    #  Relocation
+    # ------------------------------------------------------------------ #
+    _relocate_sent = False
+
+    def _do_relocate(self) -> None:
+        """Send goal_pose to base_motion_node for the next position."""
+        if self._relocate_sent:
+            return  # waiting for base_done_cb
+
+        pos = self.controller.current_work_position
+        self.get_logger().info(
+            f'Relocating base to position '
+            f'{self.controller._position_index + 1}'
+            f'/{len(self.controller.work_positions)} '
+            f'({pos.x:.2f}, {pos.y:.2f}, '
+            f'yaw={math.degrees(pos.yaw):.0f}°)')
+
+        goal_msg = PoseStamped()
+        goal_msg.header.frame_id = 'world'
+        goal_msg.header.stamp = self.get_clock().now().to_msg()
+        goal_msg.pose.position.x = pos.x
+        goal_msg.pose.position.y = pos.y
+        goal_msg.pose.position.z = 0.0
+        goal_msg.pose.orientation = Quaternion(
+            x=0.0, y=0.0,
+            z=math.sin(pos.yaw / 2.0),
+            w=math.cos(pos.yaw / 2.0),
+        )
+        self._goal_pub.publish(goal_msg)
+        self._relocate_sent = True
 
     # ------------------------------------------------------------------ #
     #  Planning
     # ------------------------------------------------------------------ #
     def _do_planning(self) -> None:
+        self._relocate_sent = False
         self.get_logger().info('Generating excavation plan …')
         if not self.controller.generate_plan():
             self.get_logger().error(
@@ -219,7 +287,22 @@ class MissionControllerNode(Node):
                     f'Filtered {removed} unreachable scoops during planning')
 
             if len(reachable_scoops) == 0:
-                self.controller.abort('No reachable scoops for current base pose')
+                self.get_logger().warn(
+                    'No reachable scoops at this position')
+                # Try the next work position instead of aborting.
+                if self.controller._advance_to_next_position():
+                    self.get_logger().info(
+                        f'Relocating to position '
+                        f'{self.controller._position_index + 1}'
+                        f'/{len(self.controller.work_positions)}')
+                else:
+                    self.controller.state = MissionState.COMPLETED
+                    ok = self.controller._succeeded_all
+                    fail = self.controller._failed_all
+                    self.controller.progress.status_text = (
+                        f'Complete: {ok} succeeded, {fail} failed '
+                        f'across {len(self.controller.work_positions)} '
+                        f'position(s)')
                 self._publish_status()
                 return
 
@@ -388,6 +471,7 @@ class MissionControllerNode(Node):
             MissionState.EXCAVATING: MissionStatusMsg.EXCAVATING,
             MissionState.COMPLETED: MissionStatusMsg.COMPLETED,
             MissionState.FAILED: MissionStatusMsg.FAILED,
+            MissionState.RELOCATING: MissionStatusMsg.MOVING_TO_WORK_POS,
         }
         msg.state = STATE_MAP.get(p.state, MissionStatusMsg.IDLE)
         msg.current_scoop_id = p.current_scoop_index

@@ -24,6 +24,8 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
+from excavation_core.parameters import DEFAULT_EXECUTION_SPEED
+
 
 def generate_launch_description():
     # --- Package paths ---
@@ -43,6 +45,7 @@ def generate_launch_description():
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
     foxglove_port = LaunchConfiguration('foxglove_port')
+    execution_speed = LaunchConfiguration('execution_speed')
 
     # --- Nodes ---
 
@@ -114,6 +117,7 @@ def generate_launch_description():
             'goal_yaw': goal_yaw,
             'linear_speed': 0.5,
             'angular_speed': 0.3,
+            'speed_multiplier': execution_speed,
             'auto_start': True,
             'use_sim_time': use_sim_time,
         }],
@@ -136,6 +140,8 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_y', default_value='-0.5'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         DeclareLaunchArgument('foxglove_port', default_value='8765'),
+        DeclareLaunchArgument('execution_speed', default_value=str(DEFAULT_EXECUTION_SPEED),
+                              description='Speed multiplier for base motion'),
 
         robot_state_publisher,
         controller_manager,

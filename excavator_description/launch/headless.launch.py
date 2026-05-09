@@ -50,7 +50,7 @@ def generate_launch_description():
 
         # --- Base motion node (world → base_link TF) ---
         Node(
-            package='excavation_world',
+            package='excavation_base_motion',
             executable='base_motion_node',
             name='base_motion',
             output='screen',

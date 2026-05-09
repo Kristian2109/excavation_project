@@ -132,7 +132,7 @@ def generate_launch_description():
 
     # --- Base motion ---
     base_motion_node = Node(
-        package='excavation_world',
+        package='excavation_base_motion',
         executable='base_motion_node',
         name='base_motion',
         output='screen',

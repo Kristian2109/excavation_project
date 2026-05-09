@@ -25,6 +25,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
+from excavation_core.parameters import DEFAULT_EXECUTION_SPEED
+
 
 def generate_launch_description():
     # --- Shared launch arguments ---
@@ -49,6 +51,7 @@ def generate_launch_description():
             'goal_x': goal_x,
             'goal_y': goal_y,
             'goal_yaw': goal_yaw,
+            'execution_speed': execution_speed,
         }.items(),
     )
 
@@ -111,7 +114,7 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         DeclareLaunchArgument('execute_arm', default_value='true',
                               description='Set false for headless / grid-only mode'),
-        DeclareLaunchArgument('execution_speed', default_value='1.0',
+        DeclareLaunchArgument('execution_speed', default_value=str(DEFAULT_EXECUTION_SPEED),
                       description='Mission speed multiplier (e.g. 2.0 = ~2x faster)'),
 
         control_launch,
