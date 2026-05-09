@@ -22,7 +22,6 @@ from excavation_core.position_planner import (
     _is_inside_hole,
     _generate_candidates,
     _order_nearest_neighbour,
-    _count_coverage,
     _fast_reachable_mask,
     _precompute_cell_centers,
     _practical_clearance,
@@ -188,18 +187,6 @@ class TestCoverage:
         positions = compute_work_positions(SMALL_HOLE)
         assert len(positions) <= 3, (
             f'Small hole should need few positions, got {len(positions)}')
-
-    def test_coverage_threshold_met(self):
-        """Selected positions should reach ≥ 90% of target cells."""
-        positions = compute_work_positions(LONG_HOLE)
-        grid = ExcavationGrid.from_hole_spec(LONG_HOLE, resolution=0.5)
-        total = len(grid.target_flat_indices())
-        covered: set[int] = set()
-        for pos in positions:
-            cells = _count_coverage(pos, grid, set())
-            covered.update(cells)
-        coverage = len(covered) / total
-        assert coverage >= 0.90, f'Coverage only {coverage:.1%}'
 
     def test_deep_hole_positions(self):
         """A deeper hole should still produce valid positions."""

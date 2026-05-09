@@ -41,13 +41,13 @@ from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, DurabilityPolicy
 
-from std_msgs.msg import Bool, ColorRGBA
-from geometry_msgs.msg import Pose, Point, Quaternion, Vector3
+from std_msgs.msg import Bool
+from geometry_msgs.msg import Pose, Point, Quaternion
 from geometry_msgs.msg import PoseStamped
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.action import FollowJointTrajectory
 from builtin_interfaces.msg import Duration
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import MarkerArray
 
 from excavation_msgs.msg import (
     MissionStatus as MissionStatusMsg,
@@ -58,18 +58,21 @@ from excavation_core.mission_controller import (
     MissionController,
     MissionState,
 )
-from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
+from excavation_core.excavation_grid import ExcavationGrid
 from excavation_core.excavation_planner import PlannedScoop
 from excavation_core.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
 )
-from excavation_core.robot_model import JOINT_NAMES, ExcavatorModel
+from excavation_core.robot_model import JOINT_NAMES
 from excavation_core.position_planner import compute_work_positions
-from excavation_core.base_planner import BasePose
 from excavation_core.parameters import (
     declare_mission_controller_node_parameters,
     retrieve_mission_controller_node_parameters,
+)
+from excavation_mission.mission_viz import (
+    build_scoop_target_markers,
+    build_arm_trajectory_markers,
 )
 
 
@@ -87,23 +90,8 @@ class MissionControllerNode(Node):
         self.get_logger().info(f'Parameters loaded: hole_depth={params.hole_geometry.hole_depth}m')
 
         # ----- Build hole spec & grid -----
-        hole = HoleSpec(
-            origin_x=params.hole_geometry.hole_origin_x,
-            origin_y=params.hole_geometry.hole_origin_y,
-            origin_z=params.hole_geometry.hole_origin_z,
-            size_x=params.hole_geometry.hole_size_x,
-            size_y=params.hole_geometry.hole_size_y,
-            depth=params.hole_geometry.hole_depth,
-        )
+        hole = params.hole_geometry.to_hole_spec()
         grid = ExcavationGrid.from_hole_spec(hole, resolution=params.hole_geometry.resolution)
-
-        # ----- State machine -----
-        # Compute working positions from hole geometry.
-        # If base_x/y/yaw were explicitly set to non-default values,
-        # use that single position.  Otherwise auto-compute from hole.
-        param_base_x = params.base_position.base_x
-        param_base_y = params.base_position.base_y
-        param_base_yaw = params.base_position.base_yaw
 
         work_positions = compute_work_positions(hole)
 
@@ -260,49 +248,26 @@ class MissionControllerNode(Node):
                 f'Planning failed: {self.controller.progress.status_text}')
             return
 
-        # In arm mode, pre-filter unreachable scoops so execution only
-        # attempts physically feasible trajectories. This reduces erratic
-        # motion and repeated runtime IK failures.
+        # In arm mode, pre-filter unreachable scoops via the controller's
+        # filter_unreachable() method (IK check lives in the node layer).
         if self._execute_arm and self.controller.plan is not None:
-            reachable_scoops = []
-            for scoop in self.controller.plan.scoops:
-                traj = plan_single_scoop(
+            def _ik_check(scoop):
+                return plan_single_scoop(
                     scoop.dig_target,
                     base_x=self.controller.base_x,
                     base_y=self.controller.base_y,
                     base_yaw=self.controller.base_yaw,
                     scoop_id=scoop.scoop_id,
                 )
-                if traj is not None:
-                    scoop.trajectory = traj
-                    reachable_scoops.append(scoop)
 
-            removed = len(self.controller.plan.scoops) - len(reachable_scoops)
-            self.controller.plan.scoops = reachable_scoops
-            self.controller.progress.total_scoops = len(reachable_scoops)
-            self.controller.progress.current_scoop_index = 0
-
+            removed = self.controller.filter_unreachable(_ik_check)
             if removed > 0:
                 self.get_logger().warn(
                     f'Filtered {removed} unreachable scoops during planning')
 
-            if len(reachable_scoops) == 0:
+            if self.controller.plan.total_scoops == 0:
                 self.get_logger().warn(
                     'No reachable scoops at this position')
-                # Try the next work position instead of aborting.
-                if self.controller._advance_to_next_position():
-                    self.get_logger().info(
-                        f'Relocating to position '
-                        f'{self.controller._position_index + 1}'
-                        f'/{len(self.controller.work_positions)}')
-                else:
-                    self.controller.state = MissionState.COMPLETED
-                    ok = self.controller._succeeded_all
-                    fail = self.controller._failed_all
-                    self.controller.progress.status_text = (
-                        f'Complete: {ok} succeeded, {fail} failed '
-                        f'across {len(self.controller.work_positions)} '
-                        f'position(s)')
                 self._publish_status()
                 return
 
@@ -489,26 +454,10 @@ class MissionControllerNode(Node):
         """Publish sphere markers for all planned scoop dig targets."""
         if self.controller.plan is None:
             return
-        ma = MarkerArray()
-        now = self.get_clock().now().to_msg()
-
-        m = Marker()
-        m.header.frame_id = 'world'
-        m.header.stamp = now
-        m.ns = 'scoop_targets'
-        m.id = 0
-        m.type = Marker.SPHERE_LIST
-        m.action = Marker.ADD
-        m.scale = Vector3(x=0.15, y=0.15, z=0.15)
-        m.color = ColorRGBA(r=0.0, g=1.0, b=0.5, a=0.6)
-        m.pose.orientation.w = 1.0
-
-        for s in self.controller.plan.scoops:
-            t = s.dig_target
-            m.points.append(Point(
-                x=float(t[0]), y=float(t[1]), z=float(t[2])))
-
-        ma.markers.append(m)
+        ma = build_scoop_target_markers(
+            self.controller.plan.scoops,
+            stamp=self.get_clock().now().to_msg(),
+        )
         self.scoop_targets_pub.publish(ma)
 
     # ------------------------------------------------------------------ #
@@ -516,56 +465,15 @@ class MissionControllerNode(Node):
     # ------------------------------------------------------------------ #
     def _publish_arm_trajectory(self, traj: ScoopTrajectory) -> None:
         """Publish a LINE_STRIP of the bucket-tip path for the current scoop."""
-        ma = MarkerArray()
-        now = self.get_clock().now().to_msg()
-
-        bx = self.controller.base_x
-        by = self.controller.base_y
-        byaw = self.controller.base_yaw
-
-        # Convert waypoint joint positions → bucket tip via FK
-        points: list[Point] = []
-        for wp in traj.waypoints:
-            model = ExcavatorModel(
-                joint_positions=wp.joint_positions.copy(),
-                base_x=bx, base_y=by, base_yaw=byaw,
-            )
-            tip = model.bucket_tip_position()
-            points.append(Point(
-                x=float(tip[0]), y=float(tip[1]), z=float(tip[2])))
-
-        m = Marker()
-        m.header.frame_id = 'world'
-        m.header.stamp = now
-        m.ns = 'arm_trajectory'
-        m.id = 0
-        m.type = Marker.LINE_STRIP
-        m.action = Marker.ADD
-        m.scale.x = 0.06
-        m.color = ColorRGBA(r=1.0, g=0.0, b=1.0, a=0.9)  # magenta
-        m.pose.orientation.w = 1.0
-        m.points = points
-        # Lifetime = one scoop duration so it auto-deletes
-        total_dur = self._trajectory_duration(traj)
-        m.lifetime.sec = int(total_dur) + 2
-        ma.markers.append(m)
-
-        # Also publish spheres at waypoints with names
-        for i, wp in enumerate(traj.waypoints):
-            sm = Marker()
-            sm.header.frame_id = 'world'
-            sm.header.stamp = now
-            sm.ns = 'arm_waypoints'
-            sm.id = i
-            sm.type = Marker.SPHERE
-            sm.action = Marker.ADD
-            sm.scale = Vector3(x=0.12, y=0.12, z=0.12)
-            sm.color = ColorRGBA(r=1.0, g=0.0, b=1.0, a=0.8)
-            sm.pose.position = points[i]
-            sm.pose.orientation.w = 1.0
-            sm.lifetime.sec = int(total_dur) + 2
-            ma.markers.append(sm)
-
+        lifetime = int(self._trajectory_duration(traj)) + 2
+        ma = build_arm_trajectory_markers(
+            traj,
+            base_x=self.controller.base_x,
+            base_y=self.controller.base_y,
+            base_yaw=self.controller.base_yaw,
+            stamp=self.get_clock().now().to_msg(),
+            lifetime_sec=lifetime,
+        )
         self.arm_traj_pub.publish(ma)
 
 

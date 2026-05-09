@@ -15,7 +15,6 @@ from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from excavation_core.excavation_grid import HoleSpec
 from excavation_core.position_planner import compute_work_positions
 from excavation_core.parameters import (
     PRM_RESOLUTION,
@@ -48,14 +47,8 @@ from excavation_core.parameters import (
 def generate_launch_description():
     # Compute the first work position from hole geometry so base_motion
     # drives to the right place automatically.
-    hole = HoleSpec(
-        origin_x=DEFAULT_HOLE_ORIGIN_X,
-        origin_y=DEFAULT_HOLE_ORIGIN_Y,
-        origin_z=DEFAULT_HOLE_ORIGIN_Z,
-        size_x=DEFAULT_HOLE_SIZE_X,
-        size_y=DEFAULT_HOLE_SIZE_Y,
-        depth=DEFAULT_HOLE_DEPTH,
-    )
+    from excavation_core.parameters import default_hole_geometry
+    hole = default_hole_geometry().to_hole_spec()
     positions = compute_work_positions(hole)
     first_pos = positions[0]
 

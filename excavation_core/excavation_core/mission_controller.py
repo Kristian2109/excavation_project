@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Callable, List, Optional, Tuple
 
 from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
 from excavation_core.excavation_planner import (
@@ -235,6 +235,49 @@ class MissionController:
             f'Excavating at position {self._position_index + 1}: '
             f'0/{self.plan.total_scoops} scoops')
         return True
+
+    def filter_unreachable(
+        self,
+        checker: Callable[[PlannedScoop], Optional[object]],
+    ) -> int:
+        """Remove scoops for which *checker* returns ``None``.
+
+        *checker* is called with each :class:`PlannedScoop`. If it returns
+        a non-``None`` value (e.g. a ``ScoopTrajectory``), the scoop is
+        kept and ``scoop.trajectory`` is set to that value.  Otherwise the
+        scoop is removed from the plan.
+
+        After filtering, ``progress`` counters are updated and – when zero
+        reachable scoops remain – the controller automatically advances to
+        the next work position (or completes the mission).
+
+        Returns the number of scoops removed.
+        """
+        if self.plan is None:
+            return 0
+
+        reachable = []
+        for scoop in self.plan.scoops:
+            result = checker(scoop)
+            if result is not None:
+                scoop.trajectory = result
+                reachable.append(scoop)
+
+        removed = len(self.plan.scoops) - len(reachable)
+        self.plan.scoops = reachable
+        self.progress.total_scoops = len(reachable)
+        self.progress.current_scoop_index = 0
+
+        if len(reachable) == 0:
+            # Try to move on to the next position instead of aborting.
+            if not self._advance_to_next_position():
+                self.state = MissionState.COMPLETED
+                self.progress.status_text = (
+                    f'Complete: {self._succeeded_all} succeeded, '
+                    f'{self._failed_all} failed '
+                    f'across {len(self.work_positions)} position(s)')
+
+        return removed
 
     def get_next_scoop(self) -> Optional[PlannedScoop]:
         """Return the next planned scoop, or *None* when done."""

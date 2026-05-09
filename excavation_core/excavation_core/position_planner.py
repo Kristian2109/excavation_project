@@ -401,34 +401,3 @@ def compute_work_positions(
     selected = _order_nearest_neighbour(selected)
 
     return selected
-
-
-def _count_coverage(
-    pos: BasePose,
-    grid,
-    already_covered: set[int],
-) -> set[int]:
-    """Return flat indices reachable from *pos* not yet covered."""
-    new_cells: set[int] = set()
-    nx, ny, nz = grid.shape
-
-    for fi in grid.target_flat_indices():
-        fi_int = int(fi)
-        if fi_int in already_covered:
-            continue
-        ix = fi_int // (ny * nz)
-        rem = fi_int % (ny * nz)
-        iy = rem // nz
-        iz = rem % nz
-        cx, cy, cz = grid.cell_centre(ix, iy, iz)
-
-        result = solve_ik_nearest(
-            np.array([cx, cy, cz]),
-            base_x=pos.x,
-            base_y=pos.y,
-            base_yaw=pos.yaw,
-        )
-        if result.success:
-            new_cells.add(fi_int)
-
-    return new_cells

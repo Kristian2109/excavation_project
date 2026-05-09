@@ -25,10 +25,10 @@ PRM_RESOLUTION = 'resolution'
 DEFAULT_RESOLUTION = 0.25  # meters
 
 PRM_HOLE_ORIGIN_X = 'hole_origin_x'
-DEFAULT_HOLE_ORIGIN_X = 5.0
+DEFAULT_HOLE_ORIGIN_X = 10.0
 
 PRM_HOLE_ORIGIN_Y = 'hole_origin_y'
-DEFAULT_HOLE_ORIGIN_Y = -2.0
+DEFAULT_HOLE_ORIGIN_Y = 10.0
 
 PRM_HOLE_ORIGIN_Z = 'hole_origin_z'
 DEFAULT_HOLE_ORIGIN_Z = 0.0
@@ -40,7 +40,7 @@ PRM_HOLE_SIZE_Y = 'hole_size_y'
 DEFAULT_HOLE_SIZE_Y = 2.0
 
 PRM_HOLE_DEPTH = 'hole_depth'
-DEFAULT_HOLE_DEPTH = 2
+DEFAULT_HOLE_DEPTH = 4
 
 # ============================================================================
 #  WORLD NODE SPECIFIC
@@ -92,6 +92,20 @@ DEFAULT_TRAIL_MAX_POINTS = 2000
 
 # Reuses: PRM_BASE_X, PRM_BASE_Y, PRM_BASE_YAW, PRM_PUBLISH_RATE
 
+
+def default_hole_geometry() -> "HoleGeometryParameters":
+    """Return a :class:`HoleGeometryParameters` built from the module defaults."""
+    return HoleGeometryParameters(
+        resolution=DEFAULT_RESOLUTION,
+        hole_origin_x=DEFAULT_HOLE_ORIGIN_X,
+        hole_origin_y=DEFAULT_HOLE_ORIGIN_Y,
+        hole_origin_z=DEFAULT_HOLE_ORIGIN_Z,
+        hole_size_x=DEFAULT_HOLE_SIZE_X,
+        hole_size_y=DEFAULT_HOLE_SIZE_Y,
+        hole_depth=DEFAULT_HOLE_DEPTH,
+    )
+
+
 # ============================================================================
 #  Data Classes for Type-Safe Parameter Retrieval
 # ============================================================================
@@ -107,6 +121,18 @@ class HoleGeometryParameters:
     hole_size_x: float
     hole_size_y: float
     hole_depth: float
+
+    def to_hole_spec(self) -> "HoleSpec":
+        """Build a :class:`HoleSpec` from these parameters (single source of truth)."""
+        from excavation_core.excavation_grid import HoleSpec
+        return HoleSpec(
+            origin_x=self.hole_origin_x,
+            origin_y=self.hole_origin_y,
+            origin_z=self.hole_origin_z,
+            size_x=self.hole_size_x,
+            size_y=self.hole_size_y,
+            depth=self.hole_depth,
+        )
 
 
 @dataclass

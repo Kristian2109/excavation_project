@@ -24,15 +24,14 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 
-from std_msgs.msg import ColorRGBA
-from geometry_msgs.msg import Point, Pose, Quaternion, Vector3, TransformStamped
+from geometry_msgs.msg import Point, TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from tf2_ros import StaticTransformBroadcaster
 
 from excavation_msgs.msg import ScoopAction as ScoopActionMsg
 from excavation_msgs.msg import ExcavationGrid as ExcavationGridMsg
 
-from excavation_core.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
+from excavation_core.excavation_grid import ExcavationGrid
 from excavation_core.excavation_model import (
     apply_scoop_to_grid,
 )
@@ -41,6 +40,11 @@ from excavation_core.position_planner import compute_work_positions
 from excavation_core.parameters import (
     declare_world_node_parameters,
     retrieve_world_node_parameters,
+)
+from excavation_world.world_markers import (
+    build_target_and_frame_markers,
+    build_excavation_markers,
+    build_working_position_markers,
 )
 
 import math
@@ -61,14 +65,7 @@ class WorldNode(Node):
         self.get_logger().info(f'Parameters loaded: resolution={params.hole_geometry.resolution}')
 
         # --- Build grid from hole geometry ---
-        hole = HoleSpec(
-            origin_x=params.hole_geometry.hole_origin_x,
-            origin_y=params.hole_geometry.hole_origin_y,
-            origin_z=params.hole_geometry.hole_origin_z,
-            size_x=params.hole_geometry.hole_size_x,
-            size_y=params.hole_geometry.hole_size_y,
-            depth=params.hole_geometry.hole_depth,
-        )
+        hole = params.hole_geometry.to_hole_spec()
         self.grid = ExcavationGrid.from_hole_spec(hole, resolution=params.hole_geometry.resolution)
         self.get_logger().info(f'Initialised: {self.grid}')
 
@@ -210,119 +207,20 @@ class WorldNode(Node):
         self._static_tf_broadcaster.sendTransform(t)
 
     def _publish_target_and_frame_markers(self) -> None:
-        """Publish target cubes AND hole frame in ONE MarkerArray.
-
-        Combining them avoids flickering: Foxglove replaces all markers
-        from a topic when a new MarkerArray arrives, so two separate
-        publishes would alternate and blink.
-        """
-        now = self.get_clock().now().to_msg()
-        ma = MarkerArray()
-
-        # --- Target cubes (two markers: blue=reachable, red=unreachable) ---
-        blue = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.55)
-        red = ColorRGBA(r=1.0, g=0.1, b=0.1, a=0.55)
-        reachable_pts: list[Point] = []
-        unreachable_pts: list[Point] = []
-
-        for fi in self.grid.unexcavated_target_flat_indices():
-            key = int(fi)
-            pt = self._target_point_by_flat[key]
-            if self._target_reachable_by_flat.get(key, True):
-                reachable_pts.append(pt)
-            else:
-                unreachable_pts.append(pt)
-
-        cube_scale = Vector3(
-            x=self.grid.resolution * 0.95,
-            y=self.grid.resolution * 0.95,
-            z=self.grid.resolution * 0.95,
+        """Publish target cubes AND hole frame in ONE MarkerArray."""
+        hg = self._params.hole_geometry
+        ma = build_target_and_frame_markers(
+            self.grid,
+            self._target_point_by_flat,
+            self._target_reachable_by_flat,
+            hole_origin_x=hg.hole_origin_x,
+            hole_origin_y=hg.hole_origin_y,
+            hole_origin_z=hg.hole_origin_z,
+            hole_size_x=hg.hole_size_x,
+            hole_size_y=hg.hole_size_y,
+            hole_depth=hg.hole_depth,
+            stamp=self.get_clock().now().to_msg(),
         )
-        for marker_id, pts, color, ns in [
-            (0, reachable_pts, blue, 'target_reachable'),
-            (1, unreachable_pts, red, 'target_unreachable'),
-        ]:
-            m = Marker()
-            m.header.frame_id = 'world'
-            m.header.stamp = now
-            m.ns = ns
-            m.id = marker_id
-            m.type = Marker.CUBE_LIST
-            m.pose.orientation.w = 1.0
-            m.scale = cube_scale
-            m.color = color
-            if pts:
-                m.action = Marker.ADD
-                m.points = pts
-            else:
-                m.action = Marker.DELETE
-            ma.markers.append(m)
-
-        # --- Hole frame (lines + text) ---
-        ox = self._params.hole_geometry.hole_origin_x
-        oy = self._params.hole_geometry.hole_origin_y
-        oz = self._params.hole_geometry.hole_origin_z
-        sx = self._params.hole_geometry.hole_size_x
-        sy = self._params.hole_geometry.hole_size_y
-        depth = self._params.hole_geometry.hole_depth
-
-        # Top rectangle
-        m = Marker()
-        m.header.frame_id = 'world'
-        m.header.stamp = now
-        m.ns = 'hole_frame'
-        m.id = 0
-        m.type = Marker.LINE_STRIP
-        m.action = Marker.ADD
-        m.scale.x = 0.08
-        m.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
-        m.pose.orientation.w = 1.0
-        m.points = [
-            Point(x=ox, y=oy, z=oz),
-            Point(x=ox + sx, y=oy, z=oz),
-            Point(x=ox + sx, y=oy + sy, z=oz),
-            Point(x=ox, y=oy + sy, z=oz),
-            Point(x=ox, y=oy, z=oz),
-        ]
-        ma.markers.append(m)
-
-        # Vertical depth lines
-        for i, (cx, cy) in enumerate([
-            (ox, oy), (ox + sx, oy),
-            (ox + sx, oy + sy), (ox, oy + sy),
-        ]):
-            vm = Marker()
-            vm.header.frame_id = 'world'
-            vm.header.stamp = now
-            vm.ns = 'hole_frame'
-            vm.id = 1 + i
-            vm.type = Marker.LINE_STRIP
-            vm.action = Marker.ADD
-            vm.scale.x = 0.06
-            vm.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=0.6)
-            vm.pose.orientation.w = 1.0
-            vm.points = [
-                Point(x=cx, y=cy, z=oz),
-                Point(x=cx, y=cy, z=oz - depth),
-            ]
-            ma.markers.append(vm)
-
-        # Text label
-        txt = Marker()
-        txt.header.frame_id = 'world'
-        txt.header.stamp = now
-        txt.ns = 'hole_frame'
-        txt.id = 10
-        txt.type = Marker.TEXT_VIEW_FACING
-        txt.action = Marker.ADD
-        txt.scale.z = 0.5
-        txt.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
-        txt.pose.position = Point(
-            x=ox + sx / 2.0, y=oy + sy / 2.0, z=oz + 0.6)
-        txt.pose.orientation.w = 1.0
-        txt.text = f'HOLE ({sx}x{sy}x{depth}m)'
-        ma.markers.append(txt)
-
         self.target_marker_pub.publish(ma)
 
     def _cache_target_marker_data(self) -> None:
@@ -386,67 +284,16 @@ class WorldNode(Node):
 
     def _publish_excavation_markers(self) -> None:
         """Publish cubes for excavated cells (orange)."""
-        ma = MarkerArray()
-        marker = Marker()
-        marker.header.frame_id = 'world'
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = 'excavated'
-        marker.id = 0
-        marker.pose.orientation.w = 1.0
-
-        nx, ny, nz = self.grid.shape
-        points = []
-        for ix in range(nx):
-            for iy in range(ny):
-                for iz in range(nz):
-                    if self.grid.is_excavated(ix, iy, iz):
-                        cx, cy, cz = self.grid.cell_centre(ix, iy, iz)
-                        points.append(Point(x=cx, y=cy, z=cz))
-
-        if points:
-            marker.type = Marker.CUBE_LIST
-            marker.action = Marker.ADD
-            marker.scale = Vector3(
-                x=self.grid.resolution * 0.92,
-                y=self.grid.resolution * 0.92,
-                z=self.grid.resolution * 0.92,
-            )
-            marker.color = ColorRGBA(r=0.9, g=0.5, b=0.1, a=0.8)
-            marker.points = points
-        else:
-            # Delete any previously shown marker (avoid empty CUBE_LIST)
-            marker.action = Marker.DELETEALL
-
-        ma.markers.append(marker)
+        ma = build_excavation_markers(
+            self.grid,
+            stamp=self.get_clock().now().to_msg(),
+        )
         self.marker_pub.publish(ma)
 
     def _publish_working_position(self) -> None:
         """Publish arrow markers at all computed working positions."""
         now = self.get_clock().now().to_msg()
-        for i, pos in enumerate(self._work_positions):
-            m = Marker()
-            m.header.frame_id = 'world'
-            m.header.stamp = now
-            m.ns = 'working_position'
-            m.id = i
-            m.type = Marker.ARROW
-            m.action = Marker.ADD
-            m.scale = Vector3(x=1.5, y=0.3, z=0.3)
-            # First position: green, others: cyan
-            if i == 0:
-                m.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=0.8)
-            else:
-                m.color = ColorRGBA(r=0.0, g=0.8, b=1.0, a=0.6)
-
-            yaw = pos.yaw
-            m.pose = Pose(
-                position=Point(x=pos.x, y=pos.y, z=0.5),
-                orientation=Quaternion(
-                    x=0.0, y=0.0,
-                    z=math.sin(yaw / 2.0),
-                    w=math.cos(yaw / 2.0),
-                ),
-            )
+        for m in build_working_position_markers(self._work_positions, now):
             self.work_pos_pub.publish(m)
 
 
