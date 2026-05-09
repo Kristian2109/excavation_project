@@ -47,7 +47,6 @@ from excavation_world.world_markers import (
     build_working_position_markers,
 )
 
-import math
 import numpy as np
 
 

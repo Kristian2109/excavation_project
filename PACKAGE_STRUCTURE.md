@@ -39,8 +39,6 @@ excavation_project/
 │   ├── excavation_base_motion/
 │   │   ├── __init__.py
 │   │   └── base_motion_node.py      # Controls robot movement to work position
-│   ├── launch/
-│   │   └── base_motion.launch.py    # Standalone base motion
 │   ├── setup.py
 │   └── package.xml
 │
@@ -135,7 +133,7 @@ excavator_moveit_config/             # MoveIt 2 (generated, not used)
 - `auto_start` — whether to start immediately
 
 **Launch files**:
-- `base_motion.launch.py` — Standalone base motion
+- No standalone launch file (base motion is launched via `excavator_control.launch.py`)
 
 ---
 
@@ -208,11 +206,6 @@ This includes (in order):
 **World only** (for testing grid logic):
 ```bash
 ros2 launch excavation_world world.launch.py
-```
-
-**Base motion only** (for testing navigation):
-```bash
-ros2 launch excavation_base_motion base_motion.launch.py goal_x:=3.0 goal_y:=0.0
 ```
 
 **Mission only** (after other systems are running):

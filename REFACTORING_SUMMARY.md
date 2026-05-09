@@ -83,8 +83,6 @@ excavation_world/
 ```
 excavation_base_motion/
 ├── base_motion_node.py (only ROS node)
-└── launch/
-    └── base_motion.launch.py (standalone)
 ```
 **Responsibility**: Robot base movement to working position
 
@@ -185,7 +183,6 @@ from excavation_core.parameters import ...
 - ✓ `setup.py`
 - ✓ `CMakeLists.txt`
 - ✓ `__init__.py`
-- ✓ `launch/base_motion.launch.py`
 
 ### `excavation_debug/`
 - ✓ `package.xml` (ament_python)
@@ -258,9 +255,6 @@ ros2 launch excavation_world mission.launch.py
 ```bash
 # World only
 ros2 launch excavation_world world.launch.py
-
-# Base motion only
-ros2 launch excavation_base_motion base_motion.launch.py
 
 # Mission only
 ros2 launch excavation_mission mission.launch.py

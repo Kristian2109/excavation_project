@@ -33,7 +33,6 @@ ros2 launch excavation_world mission.launch.py \
 ### Individual Subsystems
 ```bash
 ros2 launch excavation_world world.launch.py             # Grid only
-ros2 launch excavation_base_motion base_motion.launch.py # Movement only
 ros2 launch excavation_mission mission.launch.py         # Mission only
 ros2 launch excavation_debug debug.launch.py             # Visualization only
 ```
@@ -112,8 +111,6 @@ excavation_project/
 ├── excavation_base_motion/       ← Base movement
 │   ├── excavation_base_motion/
 │   │   └── base_motion_node.py
-│   └── launch/
-│       └── base_motion.launch.py
 │
 └── excavation_debug/             ← Debug viz
     ├── excavation_debug/

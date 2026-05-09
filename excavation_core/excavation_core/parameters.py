@@ -92,6 +92,36 @@ DEFAULT_TRAIL_MAX_POINTS = 2000
 
 # Reuses: PRM_BASE_X, PRM_BASE_Y, PRM_BASE_YAW, PRM_PUBLISH_RATE
 
+# ============================================================================
+#  BASE MOTION NODE SPECIFIC
+# ============================================================================
+PRM_START_X = 'start_x'
+DEFAULT_START_X = 0.0
+
+PRM_START_Y = 'start_y'
+DEFAULT_START_Y = 0.0
+
+PRM_START_YAW = 'start_yaw'
+DEFAULT_START_YAW = 0.0
+
+PRM_GOAL_X = 'goal_x'
+DEFAULT_GOAL_X = 3.0
+
+PRM_GOAL_Y = 'goal_y'
+DEFAULT_GOAL_Y = 0.0
+
+PRM_GOAL_YAW = 'goal_yaw'
+DEFAULT_GOAL_YAW = 0.0
+
+PRM_LINEAR_SPEED = 'linear_speed'
+DEFAULT_LINEAR_SPEED = 0.5
+
+PRM_ANGULAR_SPEED = 'angular_speed'
+DEFAULT_ANGULAR_SPEED = 0.3
+
+PRM_SPEED_MULTIPLIER = 'speed_multiplier'
+DEFAULT_SPEED_MULTIPLIER = 1.0
+
 
 def default_hole_geometry() -> "HoleGeometryParameters":
     """Return a :class:`HoleGeometryParameters` built from the module defaults."""
@@ -179,6 +209,22 @@ class DebugVisualizerNodeParameters:
     publish_rate: float
 
 
+@dataclass
+class BaseMotionNodeParameters:
+    """All parameters required by BaseMotionNode."""
+    start_x: float
+    start_y: float
+    start_yaw: float
+    goal_x: float
+    goal_y: float
+    goal_yaw: float
+    linear_speed: float
+    angular_speed: float
+    publish_rate: float
+    auto_start: bool
+    speed_multiplier: float
+
+
 # ============================================================================
 #  Helper Functions for Initial Declaration
 # ============================================================================
@@ -232,6 +278,21 @@ def declare_debug_visualizer_node_parameters(node: Node) -> None:
     declare_base_position_parameters(node)
     node.declare_parameter(PRM_TRAIL_MAX_POINTS, DEFAULT_TRAIL_MAX_POINTS)
     node.declare_parameter(PRM_PUBLISH_RATE, DEFAULT_PUBLISH_RATE)
+
+
+def declare_base_motion_node_parameters(node: Node) -> None:
+    """Declare all parameters needed by BaseMotionNode in one call."""
+    node.declare_parameter(PRM_START_X, DEFAULT_START_X)
+    node.declare_parameter(PRM_START_Y, DEFAULT_START_Y)
+    node.declare_parameter(PRM_START_YAW, DEFAULT_START_YAW)
+    node.declare_parameter(PRM_GOAL_X, DEFAULT_GOAL_X)
+    node.declare_parameter(PRM_GOAL_Y, DEFAULT_GOAL_Y)
+    node.declare_parameter(PRM_GOAL_YAW, DEFAULT_GOAL_YAW)
+    node.declare_parameter(PRM_LINEAR_SPEED, DEFAULT_LINEAR_SPEED)
+    node.declare_parameter(PRM_ANGULAR_SPEED, DEFAULT_ANGULAR_SPEED)
+    node.declare_parameter(PRM_PUBLISH_RATE, DEFAULT_PUBLISH_RATE)
+    node.declare_parameter(PRM_AUTO_START, DEFAULT_AUTO_START)
+    node.declare_parameter(PRM_SPEED_MULTIPLIER, DEFAULT_SPEED_MULTIPLIER)
 
 
 # ============================================================================
@@ -312,4 +373,21 @@ def retrieve_debug_visualizer_node_parameters(node: Node) -> DebugVisualizerNode
         base_position=retrieve_base_position_parameters(node),
         trail_max_points=int(_get_param(node, PRM_TRAIL_MAX_POINTS)),
         publish_rate=float(_get_param(node, PRM_PUBLISH_RATE)),
+    )
+
+
+def retrieve_base_motion_node_parameters(node: Node) -> BaseMotionNodeParameters:
+    """Retrieve all BaseMotionNode parameters with validation."""
+    return BaseMotionNodeParameters(
+        start_x=float(_get_param(node, PRM_START_X)),
+        start_y=float(_get_param(node, PRM_START_Y)),
+        start_yaw=float(_get_param(node, PRM_START_YAW)),
+        goal_x=float(_get_param(node, PRM_GOAL_X)),
+        goal_y=float(_get_param(node, PRM_GOAL_Y)),
+        goal_yaw=float(_get_param(node, PRM_GOAL_YAW)),
+        linear_speed=float(_get_param(node, PRM_LINEAR_SPEED)),
+        angular_speed=float(_get_param(node, PRM_ANGULAR_SPEED)),
+        publish_rate=float(_get_param(node, PRM_PUBLISH_RATE)),
+        auto_start=bool(_get_param(node, PRM_AUTO_START)),
+        speed_multiplier=float(_get_param(node, PRM_SPEED_MULTIPLIER)),
     )

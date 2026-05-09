@@ -38,6 +38,10 @@ from excavation_core.base_planner import (
     BasePose,
     plan_base_trajectory,
 )
+from excavation_core.parameters import (
+    declare_base_motion_node_parameters,
+    retrieve_base_motion_node_parameters,
+)
 
 
 def _yaw_to_quaternion(yaw: float) -> Quaternion:
@@ -52,34 +56,46 @@ class BaseMotionNode(Node):
     def __init__(self) -> None:
         super().__init__('base_motion')
 
-        # --- Parameters (float() cast handles string overrides from launch) ---
-        self.declare_parameter('start_x', 0.0)
-        self.declare_parameter('start_y', 0.0)
-        self.declare_parameter('start_yaw', 0.0)
-        self.declare_parameter('goal_x', 3.0)
-        self.declare_parameter('goal_y', 0.0)
-        self.declare_parameter('goal_yaw', 0.0)
-        self.declare_parameter('linear_speed', 0.5)
-        self.declare_parameter('angular_speed', 0.3)
-        self.declare_parameter('publish_rate', 20.0)
-        self.declare_parameter('auto_start', True)
-        self.declare_parameter('speed_multiplier', 1.0)
+        self._params = self._load_parameters()
+        start, goal = self._load_start_and_goal()
+        self._load_speed_settings()
+        self._plan_trajectory(start, goal)
+        self._initialize_state(start)
+        self._setup_ros_interfaces()
+        self._publish_path()
+        self._setup_timer()
+        self._maybe_auto_start()
 
-        def _f(name: str) -> float:
-            return float(self.get_parameter(name).value)
+    def _load_parameters(self):
+        """Declare and retrieve all node parameters from central helpers."""
+        declare_base_motion_node_parameters(self)
+        return retrieve_base_motion_node_parameters(self)
 
-        speed_mult = max(0.1, _f('speed_multiplier'))
+    def _load_start_and_goal(self) -> tuple[BasePose, BasePose]:
+        """Load initial and goal poses from parameters."""
+        start = BasePose(
+            x=self._params.start_x,
+            y=self._params.start_y,
+            yaw=self._params.start_yaw,
+        )
+        goal = BasePose(
+            x=self._params.goal_x,
+            y=self._params.goal_y,
+            yaw=self._params.goal_yaw,
+        )
+        return start, goal
 
-        start = BasePose(x=_f('start_x'), y=_f('start_y'), yaw=_f('start_yaw'))
-        goal = BasePose(x=_f('goal_x'), y=_f('goal_y'), yaw=_f('goal_yaw'))
+    def _load_speed_settings(self) -> None:
+        """Cache speed settings used for planning and re-planning."""
+        speed_mult = max(0.1, self._params.speed_multiplier)
+        self.linear_speed = self._params.linear_speed * speed_mult
+        self.angular_speed = self._params.angular_speed * speed_mult
 
-        # --- Speed settings (cached for re-planning), scaled by multiplier ---
-        self.linear_speed = _f('linear_speed') * speed_mult
-        self.angular_speed = _f('angular_speed') * speed_mult
-
-        # --- Plan trajectory ---
+    def _plan_trajectory(self, start: BasePose, goal: BasePose) -> None:
+        """Plan the current active trajectory."""
         self.trajectory = plan_base_trajectory(
-            start, goal,
+            start,
+            goal,
             linear_speed=self.linear_speed,
             angular_speed=self.angular_speed,
         )
@@ -87,35 +103,34 @@ class BaseMotionNode(Node):
             f'Base trajectory planned: {len(self.trajectory.points)} points, '
             f'duration={self.trajectory.duration:.1f}s')
 
-        # --- State ---
+    def _initialize_state(self, start: BasePose) -> None:
+        """Initialize runtime state variables."""
         self.running = False
         self.done = False
-        self.t_start = None     # will be set when motion begins
+        self.t_start = None
         self.current_pose = start
 
-        # --- TF broadcaster ---
+    def _setup_ros_interfaces(self) -> None:
+        """Create publishers, subscribers, and TF broadcaster."""
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # --- Publishers ---
         latching = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_pub = self.create_publisher(Path, '/base_motion/path', latching)
         self.done_pub = self.create_publisher(
-            Bool, '/base_motion/done',
-            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            Bool,
+            '/base_motion/done',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
 
-        # --- Subscriber for runtime goal updates from Foxglove ---
-        self.create_subscription(
-            PoseStamped, '/goal_pose', self._goal_pose_cb, 10)
+        self.create_subscription(PoseStamped, '/goal_pose', self._goal_pose_cb, 10)
 
-        # --- Publish the planned path once ---
-        self._publish_path()
+    def _setup_timer(self) -> None:
+        """Create periodic timer that advances trajectory and publishes TF."""
+        self.timer = self.create_timer(1.0 / self._params.publish_rate, self._tick)
 
-        # --- Timer ---
-        rate = self.get_parameter('publish_rate').value
-        self.timer = self.create_timer(1.0 / rate, self._tick)
-
-        # --- Auto-start ---
-        if self.get_parameter('auto_start').value:
+    def _maybe_auto_start(self) -> None:
+        """Start motion immediately when configured."""
+        if self._params.auto_start:
             self.start_motion()
 
     # ------------------------------------------------------------------ #

@@ -82,17 +82,36 @@ class MissionControllerNode(Node):
     def __init__(self) -> None:
         super().__init__('mission_controller')
 
-        # ----- Declare all parameters at once (single source of truth) -----
+        params = self._load_parameters()
+        self.controller = self._build_controller(params)
+        self._cache_execution_settings(params)
+        self._initialize_runtime_state()
+        self._create_publishers()
+        self._create_subscribers()
+        self._create_action_client_if_needed()
+        self._create_timers()
+        self._maybe_auto_start(params)
+
+        self._publish_status()
+        self.get_logger().info(
+            f'MissionController ready  (execute_arm={self._execute_arm}, '
+            f'execution_speed={self._execution_speed:.2f}x)')
+
+    def _load_parameters(self):
+        """Declare and retrieve node parameters from the shared parameter module."""
         declare_mission_controller_node_parameters(self)
-
-        # ----- Read all parameters at once (validated + type-safe) -----
         params = retrieve_mission_controller_node_parameters(self)
-        self.get_logger().info(f'Parameters loaded: hole_depth={params.hole_geometry.hole_depth}m')
+        self.get_logger().info(
+            f'Parameters loaded: hole_depth={params.hole_geometry.hole_depth}m')
+        return params
 
-        # ----- Build hole spec & grid -----
+    def _build_controller(self, params) -> MissionController:
+        """Create hole/grid/work-position objects and initialize mission controller."""
         hole = params.hole_geometry.to_hole_spec()
-        grid = ExcavationGrid.from_hole_spec(hole, resolution=params.hole_geometry.resolution)
-
+        grid = ExcavationGrid.from_hole_spec(
+            hole,
+            resolution=params.hole_geometry.resolution,
+        )
         work_positions = compute_work_positions(hole)
 
         self.get_logger().info(
@@ -102,12 +121,13 @@ class MissionControllerNode(Node):
                 for p in work_positions
             ))
 
-        self.controller = MissionController(
+        return MissionController(
             hole=hole, grid=grid,
             work_positions=work_positions,
         )
 
-        # ----- Cache mission parameters -----
+    def _cache_execution_settings(self, params) -> None:
+        """Cache execution-related settings for mission timing and mode."""
         self._execute_arm = params.execute_arm
         self._scoop_delay = params.scoop_delay
         self._execution_speed = float(params.execution_speed)
@@ -116,13 +136,16 @@ class MissionControllerNode(Node):
                 f'Invalid execution_speed={self._execution_speed}; using 1.0')
             self._execution_speed = 1.0
 
-        # ----- Scoop execution tracking -----
+    def _initialize_runtime_state(self) -> None:
+        """Initialize mutable runtime state used during mission execution."""
         self._scoop_active = False
         self._current_scoop: PlannedScoop | None = None
         self._last_scoop_time = 0.0
         self._goal_handle = None
+        self._relocate_sent = False
 
-        # ----- Publishers -----
+    def _create_publishers(self) -> None:
+        """Create all publishers used by this node."""
         self.status_pub = self.create_publisher(
             MissionStatusMsg, '/mission/status', 10)
         self.scoop_action_pub = self.create_publisher(
@@ -131,17 +154,16 @@ class MissionControllerNode(Node):
             MarkerArray, '/debug/arm_trajectory', QoSProfile(depth=5))
         self.scoop_targets_pub = self.create_publisher(
             MarkerArray, '/debug/scoop_targets', QoSProfile(depth=5))
+        self._goal_pub = self.create_publisher(PoseStamped, '/goal_pose', 10)
 
-        # ----- Subscriber: base motion done -----
+    def _create_subscribers(self) -> None:
+        """Create all subscribers used by this node."""
         self.create_subscription(
             Bool, '/base_motion/done', self._base_done_cb,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 
-        # ----- Publisher: command base motion to a new goal -----
-        self._goal_pub = self.create_publisher(
-            PoseStamped, '/goal_pose', 10)
-
-        # ----- Action client for arm (only if needed) -----
+    def _create_action_client_if_needed(self) -> None:
+        """Create FollowJointTrajectory action client when arm execution is enabled."""
         self._action_client = None
         if self._execute_arm:
             self._cb_group = ReentrantCallbackGroup()
@@ -151,18 +173,15 @@ class MissionControllerNode(Node):
                 callback_group=self._cb_group,
             )
 
-        # ----- Timer: tick at 2 Hz to drive the state machine -----
+    def _create_timers(self) -> None:
+        """Create periodic timers."""
         self.create_timer(0.5, self._tick)
 
-        # ----- Auto-start -----
+    def _maybe_auto_start(self, params) -> None:
+        """Start mission immediately when configured."""
         if params.auto_start:
             self.controller.start_mission()
             self.get_logger().info('Mission auto-started → MOVING_TO_WORK_POS')
-
-        self._publish_status()
-        self.get_logger().info(
-            f'MissionController ready  (execute_arm={self._execute_arm}, '
-            f'execution_speed={self._execution_speed:.2f}x)')
 
     # ------------------------------------------------------------------ #
     #  Tick – main loop
@@ -173,16 +192,26 @@ class MissionControllerNode(Node):
         if state == MissionState.PLANNING:
             self._do_planning()
 
-        elif state == MissionState.EXCAVATING and not self._scoop_active:
-            # Enforce minimum delay between scoops
-            effective_delay = self._scoop_delay / self._execution_speed
-            if time.monotonic() - self._last_scoop_time >= effective_delay:
-                self._advance_excavation()
+        elif state == MissionState.EXCAVATING:
+            self._handle_excavating_state()
 
         elif state == MissionState.RELOCATING:
             self._do_relocate()
 
         self._publish_status()
+
+    def _handle_excavating_state(self) -> None:
+        """Handle excavation state work for this tick."""
+        if self._scoop_active:
+            return
+        if not self._scoop_delay_elapsed():
+            return
+        self._advance_excavation()
+
+    def _scoop_delay_elapsed(self) -> bool:
+        """Return True when enough time passed before starting next scoop."""
+        effective_delay = self._scoop_delay / self._execution_speed
+        return (time.monotonic() - self._last_scoop_time) >= effective_delay
 
     # ------------------------------------------------------------------ #
     #  Base-motion callback
@@ -208,8 +237,6 @@ class MissionControllerNode(Node):
     # ------------------------------------------------------------------ #
     #  Relocation
     # ------------------------------------------------------------------ #
-    _relocate_sent = False
-
     def _do_relocate(self) -> None:
         """Send goal_pose to base_motion_node for the next position."""
         if self._relocate_sent:
