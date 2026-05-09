@@ -36,6 +36,7 @@ from excavation_core.excavation_planner import (
 )
 from excavation_core.excavation_model import ScoopFootprint
 from excavation_core.base_planner import BasePose
+from excavation_core.position_planner import compute_work_positions
 
 
 # ====================================================================== #
@@ -292,18 +293,47 @@ class MissionController:
     def _advance_to_next_position(self) -> bool:
         """Try to advance to the next work position.
 
+        If no pre-planned positions remain but the grid still has
+        unexcavated target cells, dynamically compute extra positions
+        and continue.
+
         Returns True if we're now RELOCATING to a new position,
-        False if no more positions remain.
+        False if no more positions remain or the grid is complete.
         """
         nxt = self._position_index + 1
-        if nxt >= len(self.work_positions):
+        if nxt < len(self.work_positions):
+            self._apply_position(nxt)
+            self.state = MissionState.RELOCATING
+            self.progress.current_position_index = nxt
+            self.progress.status_text = (
+                f'Relocating to position {nxt + 1}'
+                f'/{len(self.work_positions)}')
+            return True
+
+        # All pre-planned positions exhausted — check for remaining cells.
+        if self.grid.remaining_target_cells == 0:
             return False
 
+        # Re-compute positions from the hole; skip any already visited.
+        new_positions = compute_work_positions(self.hole)
+        visited = {(round(p.x, 3), round(p.y, 3))
+                   for p in self.work_positions}
+        extras = [p for p in new_positions
+                  if (round(p.x, 3), round(p.y, 3)) not in visited]
+
+        if not extras:
+            return False
+
+        # Append the new positions and continue.
+        self.work_positions.extend(extras)
+        self.progress.total_positions = len(self.work_positions)
+        nxt = self._position_index + 1
         self._apply_position(nxt)
         self.state = MissionState.RELOCATING
         self.progress.current_position_index = nxt
         self.progress.status_text = (
-            f'Relocating to position {nxt + 1}/{len(self.work_positions)}')
+            f'Relocating to position {nxt + 1}'
+            f'/{len(self.work_positions)} (re-planned)')
         return True
 
     def abort(self, reason: str = 'Mission aborted') -> None:
