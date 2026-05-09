@@ -155,7 +155,6 @@ excavator_moveit_config/             # MoveIt 2 (generated, not used)
 **Parameters**:
 - All hole geometry + resolution
 - Base position
-- `execute_arm` (bool) — enable/disable arm execution
 - `scoop_delay`, `arm_timeout` — timing parameters
 
 **Launch files**:

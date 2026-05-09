@@ -19,11 +19,6 @@
 ros2 launch excavation_world mission.launch.py
 ```
 
-### Headless (No Arm)
-```bash
-ros2 launch excavation_world mission.launch.py execute_arm:=false
-```
-
 ### Custom Working Position
 ```bash
 ros2 launch excavation_world mission.launch.py \
@@ -185,7 +180,7 @@ All parameters defined in `excavation_core/parameters.py`:
 - Hole geometry: `hole_origin_*, hole_size_*, hole_depth, resolution`
 - Working position: `working_position_*`
 - Base position: `base_*`
-- Node-specific: `publish_rate`, `execute_arm`, `auto_start`, etc.
+- Node-specific: `publish_rate`, `auto_start`, etc.
 
 Override in launch file:
 ```python
@@ -193,7 +188,6 @@ parameters=[{
     'hole_origin_x': 5.0,
     'resolution': 0.25,
     'goal_x': goal_x,
-    'execute_arm': execute_arm,
 }]
 ```
 

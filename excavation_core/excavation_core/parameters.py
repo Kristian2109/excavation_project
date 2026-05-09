@@ -72,9 +72,6 @@ DEFAULT_BASE_Y = -0.5
 PRM_BASE_YAW = 'base_yaw'
 DEFAULT_BASE_YAW = 0.0
 
-PRM_EXECUTE_ARM = 'execute_arm'
-DEFAULT_EXECUTE_ARM = True
-
 PRM_AUTO_START = 'auto_start'
 DEFAULT_AUTO_START = True
 
@@ -195,7 +192,6 @@ class MissionControllerNodeParameters:
     """All parameters required by MissionControllerNode."""
     hole_geometry: HoleGeometryParameters
     base_position: BasePositionParameters
-    execute_arm: bool
     auto_start: bool
     scoop_delay: float
     execution_speed: float
@@ -267,7 +263,6 @@ def declare_mission_controller_node_parameters(node: Node) -> None:
     """Declare all parameters needed by MissionControllerNode in one call."""
     declare_hole_geometry_parameters(node)
     declare_base_position_parameters(node)
-    node.declare_parameter(PRM_EXECUTE_ARM, DEFAULT_EXECUTE_ARM)
     node.declare_parameter(PRM_AUTO_START, DEFAULT_AUTO_START)
     node.declare_parameter(PRM_SCOOP_DELAY, DEFAULT_SCOOP_DELAY)
     node.declare_parameter(PRM_EXECUTION_SPEED, DEFAULT_EXECUTION_SPEED)
@@ -360,7 +355,6 @@ def retrieve_mission_controller_node_parameters(node: Node) -> MissionController
     return MissionControllerNodeParameters(
         hole_geometry=retrieve_hole_geometry_parameters(node),
         base_position=retrieve_base_position_parameters(node),
-        execute_arm=bool(_get_param(node, PRM_EXECUTE_ARM)),
         auto_start=bool(_get_param(node, PRM_AUTO_START)),
         scoop_delay=float(_get_param(node, PRM_SCOOP_DELAY)),
         execution_speed=float(_get_param(node, PRM_EXECUTION_SPEED)),

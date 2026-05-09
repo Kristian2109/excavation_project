@@ -5,9 +5,6 @@ Usage
 -----
 Full mission (arm execution):
     ros2 launch excavation_mission mission.launch.py
-
-Headless (grid-only, no arm):
-    ros2 launch excavation_mission mission.launch.py execute_arm:=false
 """
 
 from launch import LaunchDescription
@@ -34,7 +31,6 @@ from excavation_core.parameters import (
     PRM_BASE_X,
     PRM_BASE_Y,
     PRM_BASE_YAW,
-    PRM_EXECUTE_ARM,
     PRM_AUTO_START,
     DEFAULT_AUTO_START,
     PRM_SCOOP_DELAY,
@@ -55,7 +51,6 @@ def generate_launch_description():
     goal_x = LaunchConfiguration('goal_x')
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
-    execute_arm = LaunchConfiguration('execute_arm')
     execution_speed = LaunchConfiguration('execution_speed')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
@@ -75,7 +70,6 @@ def generate_launch_description():
             PRM_BASE_X: goal_x,
             PRM_BASE_Y: goal_y,
             PRM_BASE_YAW: goal_yaw,
-            PRM_EXECUTE_ARM: execute_arm,
             PRM_AUTO_START: DEFAULT_AUTO_START,
             PRM_SCOOP_DELAY: DEFAULT_SCOOP_DELAY,
             PRM_EXECUTION_SPEED: execution_speed,
@@ -94,8 +88,6 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_x', default_value=str(first_pos.x)),
         DeclareLaunchArgument('goal_y', default_value=str(first_pos.y)),
         DeclareLaunchArgument('goal_yaw', default_value=str(first_pos.yaw)),
-        DeclareLaunchArgument('execute_arm', default_value='true',
-                              description='Set false for headless / grid-only mode'),
         DeclareLaunchArgument('execution_speed', default_value=str(DEFAULT_EXECUTION_SPEED),
                               description='Mission speed multiplier (e.g. 2.0 = ~2x faster)'),
         delayed_mission,

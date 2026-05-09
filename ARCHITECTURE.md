@@ -408,7 +408,6 @@ Target markers (1536 cubes) are republished every 5s as a keepalive for Foxglove
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `execute_arm` | `true` | `false` for headless/grid-only mode |
 | `auto_start` | `true` | Start mission immediately on node startup |
 | `scoop_delay` | 0.5 | Seconds between scoops |
 | `arm_timeout` | 30.0 | Seconds before arm action times out |
@@ -448,12 +447,6 @@ cd /root/ws
 colcon build
 source install/setup.bash
 ros2 launch excavation_world mission.launch.py
-```
-
-### Headless mode (grid-only, no arm motion)
-
-```bash
-ros2 launch excavation_world mission.launch.py execute_arm:=false
 ```
 
 ### Foxglove visualization

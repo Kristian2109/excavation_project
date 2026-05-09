@@ -18,13 +18,10 @@ Parameters
         Same as world_node – define the target hole.
     base_x, base_y, base_yaw
         Robot working position (must match base_motion_node goal).
-    execute_arm (bool, default True)
-        When *False*, scoops are published without driving the arm
-        (headless mode – useful for fast testing / grid-only demos).
     auto_start (bool, default True)
         Immediately start the mission (base motion already running).
     scoop_delay (float, default 0.5)
-        Minimum seconds between consecutive scoops (headless mode only).
+        Minimum seconds between consecutive scoops.
     execution_speed (float, default 1.0)
         Speed multiplier for excavation execution timing.
         Example: 2.0 runs about 2x faster, 0.5 runs about 2x slower.
@@ -88,14 +85,13 @@ class MissionControllerNode(Node):
         self._initialize_runtime_state()
         self._create_publishers()
         self._create_subscribers()
-        self._create_action_client_if_needed()
+        self._create_action_client()
         self._create_timers()
         self._maybe_auto_start(params)
 
         self._publish_status()
         self.get_logger().info(
-            f'MissionController ready  (execute_arm={self._execute_arm}, '
-            f'execution_speed={self._execution_speed:.2f}x)')
+            f'MissionController ready  (execution_speed={self._execution_speed:.2f}x)')
 
     def _load_parameters(self):
         """Declare and retrieve node parameters from the shared parameter module."""
@@ -127,8 +123,7 @@ class MissionControllerNode(Node):
         )
 
     def _cache_execution_settings(self, params) -> None:
-        """Cache execution-related settings for mission timing and mode."""
-        self._execute_arm = params.execute_arm
+        """Cache execution-related settings for mission timing."""
         self._scoop_delay = params.scoop_delay
         self._execution_speed = float(params.execution_speed)
         if self._execution_speed <= 0.0:
@@ -162,16 +157,14 @@ class MissionControllerNode(Node):
             Bool, '/base_motion/done', self._base_done_cb,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 
-    def _create_action_client_if_needed(self) -> None:
-        """Create FollowJointTrajectory action client when arm execution is enabled."""
-        self._action_client = None
-        if self._execute_arm:
-            self._cb_group = ReentrantCallbackGroup()
-            self._action_client = ActionClient(
-                self, FollowJointTrajectory,
-                '/arm_controller/follow_joint_trajectory',
-                callback_group=self._cb_group,
-            )
+    def _create_action_client(self) -> None:
+        """Create FollowJointTrajectory action client for arm execution."""
+        self._cb_group = ReentrantCallbackGroup()
+        self._action_client = ActionClient(
+            self, FollowJointTrajectory,
+            '/arm_controller/follow_joint_trajectory',
+            callback_group=self._cb_group,
+        )
 
     def _create_timers(self) -> None:
         """Create periodic timers."""
@@ -275,9 +268,9 @@ class MissionControllerNode(Node):
                 f'Planning failed: {self.controller.progress.status_text}')
             return
 
-        # In arm mode, pre-filter unreachable scoops via the controller's
+        # Pre-filter unreachable scoops via the controller's
         # filter_unreachable() method (IK check lives in the node layer).
-        if self._execute_arm and self.controller.plan is not None:
+        if self.controller.plan is not None:
             def _ik_check(scoop):
                 return plan_single_scoop(
                     scoop.dig_target,
@@ -323,14 +316,7 @@ class MissionControllerNode(Node):
             f'({scoop.dig_target[0]:.2f}, {scoop.dig_target[1]:.2f}, '
             f'{scoop.dig_target[2]:.2f})')
 
-        # -- Headless mode: publish immediately, no arm motion --
-        if not self._execute_arm:
-            self._publish_scoop_action(scoop)
-            self.controller.on_scoop_completed(True)
-            self._last_scoop_time = time.monotonic()
-            return
-
-        # -- Arm mode: use pre-planned trajectory when available --
+        # Use pre-planned trajectory when available.
         traj = scoop.trajectory
         if traj is None:
             traj = plan_single_scoop(
