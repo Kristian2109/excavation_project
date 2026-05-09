@@ -20,7 +20,6 @@ import pytest
 from excavation_core.ik_solver import (
     IKResult,
     IKStatus,
-    check_reachability,
     solve_ik,
     solve_ik_nearest,
     verify_ik_solution,
@@ -170,18 +169,6 @@ def test_far_to_the_side():
     target = np.array([0.0, 12.0, 0.0])
     result = solve_ik_nearest(target)
     assert not result.success
-
-
-# ====================================================================== #
-#  Reachability helper
-# ====================================================================== #
-
-def test_reachable_point():
-    assert check_reachability(np.array([4.0, 0.0, 0.5]))
-
-
-def test_unreachable_point():
-    assert not check_reachability(np.array([15.0, 0.0, 0.0]))
 
 
 # ====================================================================== #

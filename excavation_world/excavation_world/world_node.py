@@ -36,7 +36,7 @@ from excavation_core.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
 from excavation_core.excavation_model import (
     apply_scoop_to_grid,
 )
-from excavation_core.ik_solver import check_reachability
+from excavation_core.ik_solver import solve_ik_nearest
 from excavation_core.parameters import (
     declare_world_node_parameters,
     retrieve_world_node_parameters,
@@ -80,10 +80,10 @@ class WorldNode(Node):
             'yaw': params.working_position.working_position_yaw,
         }
         self._target_point_by_flat: dict[int, Point] = {}
-        self._target_color_by_flat: dict[int, ColorRGBA] = {}
+        self._target_reachable_by_flat: dict[int, bool] = {}
         self._target_flat_indices: list[int] = []
         self._reachability_scan_index = 0
-        self._reachability_scan_batch = 120
+        self._reachability_scan_batch = 20
         self._reachability_scan_timer = None
         self._reachability_reachable = 0
         self._reachability_unreachable = 0
@@ -209,27 +209,44 @@ class WorldNode(Node):
         now = self.get_clock().now().to_msg()
         ma = MarkerArray()
 
-        # --- Target cubes ---
-        marker = Marker()
-        marker.header.frame_id = 'world'
-        marker.header.stamp = now
-        marker.ns = 'target_hole'
-        marker.id = 0
-        marker.type = Marker.CUBE_LIST
-        marker.action = Marker.ADD
-        marker.scale = Vector3(
+        # --- Target cubes (two markers: blue=reachable, red=unreachable) ---
+        blue = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.55)
+        red = ColorRGBA(r=1.0, g=0.1, b=0.1, a=0.55)
+        reachable_pts: list[Point] = []
+        unreachable_pts: list[Point] = []
+
+        for fi in self.grid.unexcavated_target_flat_indices():
+            key = int(fi)
+            pt = self._target_point_by_flat[key]
+            if self._target_reachable_by_flat.get(key, True):
+                reachable_pts.append(pt)
+            else:
+                unreachable_pts.append(pt)
+
+        cube_scale = Vector3(
             x=self.grid.resolution * 0.95,
             y=self.grid.resolution * 0.95,
             z=self.grid.resolution * 0.95,
         )
-        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
-        marker.pose.orientation.w = 1.0
-
-        indices = self.grid.unexcavated_target_flat_indices()
-        marker.points = [self._target_point_by_flat[int(fi)] for fi in indices]
-        marker.colors = [self._target_color_by_flat[int(fi)] for fi in indices]
-
-        ma.markers.append(marker)
+        for marker_id, pts, color, ns in [
+            (0, reachable_pts, blue, 'target_reachable'),
+            (1, unreachable_pts, red, 'target_unreachable'),
+        ]:
+            m = Marker()
+            m.header.frame_id = 'world'
+            m.header.stamp = now
+            m.ns = ns
+            m.id = marker_id
+            m.type = Marker.CUBE_LIST
+            m.pose.orientation.w = 1.0
+            m.scale = cube_scale
+            m.color = color
+            if pts:
+                m.action = Marker.ADD
+                m.points = pts
+            else:
+                m.action = Marker.DELETE
+            ma.markers.append(m)
 
         # --- Hole frame (lines + text) ---
         ox = self._params.hole_geometry.hole_origin_x
@@ -300,10 +317,8 @@ class WorldNode(Node):
 
     def _cache_target_marker_data(self) -> None:
         """Cache target cube positions; compute reachability colors asynchronously."""
-        reachable_color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.55)
-
         point_by_flat: dict[int, Point] = {}
-        color_by_flat: dict[int, ColorRGBA] = {}
+        reachable_by_flat: dict[int, bool] = {}
 
         indices = self.grid.target_flat_indices()
         self._target_flat_indices = [int(fi) for fi in indices]
@@ -316,10 +331,10 @@ class WorldNode(Node):
             cx, cy, cz = self.grid.cell_centre(ix, iy, iz)
 
             point_by_flat[int(fi)] = Point(x=cx, y=cy, z=cz)
-            color_by_flat[int(fi)] = reachable_color
+            reachable_by_flat[int(fi)] = True
 
         self._target_point_by_flat = point_by_flat
-        self._target_color_by_flat = color_by_flat
+        self._target_reachable_by_flat = reachable_by_flat
         self.get_logger().info(
             f'Cached {len(self._target_flat_indices)} target cells; '
             'starting background reachability scan')
@@ -336,9 +351,6 @@ class WorldNode(Node):
                 f'{self._reachability_unreachable} unreachable')
             return
 
-        unreachable_color = ColorRGBA(r=1.0, g=0.1, b=0.1, a=0.55)
-        reachable_color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.55)
-
         end = min(
             self._reachability_scan_index + self._reachability_scan_batch,
             len(self._target_flat_indices),
@@ -346,17 +358,17 @@ class WorldNode(Node):
         for idx in range(self._reachability_scan_index, end):
             fi = self._target_flat_indices[idx]
             pt = self._target_point_by_flat[fi]
-            reachable = check_reachability(
+            ik_result = solve_ik_nearest(
                 np.array([pt.x, pt.y, pt.z]),
                 base_x=self.working_position['x'],
                 base_y=self.working_position['y'],
                 base_yaw=self.working_position['yaw'],
             )
-            if reachable:
-                self._target_color_by_flat[fi] = reachable_color
+            if ik_result.success:
+                self._target_reachable_by_flat[fi] = True
                 self._reachability_reachable += 1
             else:
-                self._target_color_by_flat[fi] = unreachable_color
+                self._target_reachable_by_flat[fi] = False
                 self._reachability_unreachable += 1
 
         self._reachability_scan_index = end
