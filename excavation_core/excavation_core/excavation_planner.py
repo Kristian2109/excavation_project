@@ -204,15 +204,6 @@ def plan_excavation(
             for y_t in ys:
                 dig_target = np.array([x_t, y_t, z_t])
 
-                # Compute cabin angle toward target
-                dx = x_t - base_x
-                dy = y_t - base_y
-                cos_yaw = math.cos(base_yaw)
-                sin_yaw = math.sin(base_yaw)
-                x_local = cos_yaw * dx + sin_yaw * dy
-                y_local = -sin_yaw * dx + cos_yaw * dy
-                cabin_angle = math.atan2(y_local, x_local)
-
                 # Compute affected cells using axis-aligned footprint.
                 # The actual bucket is rotated by the cabin angle, but for
                 # planning purposes an axis-aligned footprint tiles the

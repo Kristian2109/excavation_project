@@ -36,6 +36,7 @@ from excavation_core.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
 from excavation_core.excavation_model import (
     apply_scoop_to_grid,
 )
+from excavation_core.ik_solver import check_reachability
 from excavation_core.parameters import (
     declare_world_node_parameters,
     retrieve_world_node_parameters,
@@ -78,6 +79,15 @@ class WorldNode(Node):
             'z': params.working_position.working_position_z,
             'yaw': params.working_position.working_position_yaw,
         }
+        self._target_point_by_flat: dict[int, Point] = {}
+        self._target_color_by_flat: dict[int, ColorRGBA] = {}
+        self._target_flat_indices: list[int] = []
+        self._reachability_scan_index = 0
+        self._reachability_scan_batch = 120
+        self._reachability_scan_timer = None
+        self._reachability_reachable = 0
+        self._reachability_unreachable = 0
+        self._cache_target_marker_data()
 
         # --- Publishers ---
         # Use depth=5 volatile QoS so Foxglove bridge can subscribe.
@@ -119,6 +129,10 @@ class WorldNode(Node):
         self._publish_working_position()
         self._publish_excavation_markers()
         self._publish_grid_state()
+
+        # Reachability coloring is computed incrementally to avoid startup freeze.
+        self._reachability_scan_timer = self.create_timer(
+            0.05, self._reachability_scan_tick)
 
     # ------------------------------------------------------------------ #
     #  Periodic publish
@@ -169,6 +183,7 @@ class WorldNode(Node):
             f'remaining={self.grid.remaining_target_cells}, '
             f'completion={self.grid.completion_fraction:.1%}')
         # Immediately update visualization
+        self._publish_target_and_frame_markers()
         self._publish_excavation_markers()
         self._publish_grid_state()
 
@@ -207,18 +222,12 @@ class WorldNode(Node):
             y=self.grid.resolution * 0.95,
             z=self.grid.resolution * 0.95,
         )
-        marker.color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.5)
+        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
         marker.pose.orientation.w = 1.0
 
-        indices = self.grid.target_flat_indices()
-        nx, ny, nz = self.grid.shape
-        for fi in indices:
-            ix = int(fi) // (ny * nz)
-            rem = int(fi) % (ny * nz)
-            iy = rem // nz
-            iz = rem % nz
-            cx, cy, cz = self.grid.cell_centre(ix, iy, iz)
-            marker.points.append(Point(x=cx, y=cy, z=cz))
+        indices = self.grid.unexcavated_target_flat_indices()
+        marker.points = [self._target_point_by_flat[int(fi)] for fi in indices]
+        marker.colors = [self._target_color_by_flat[int(fi)] for fi in indices]
 
         ma.markers.append(marker)
 
@@ -288,6 +297,70 @@ class WorldNode(Node):
         ma.markers.append(txt)
 
         self.target_marker_pub.publish(ma)
+
+    def _cache_target_marker_data(self) -> None:
+        """Cache target cube positions; compute reachability colors asynchronously."""
+        reachable_color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.55)
+
+        point_by_flat: dict[int, Point] = {}
+        color_by_flat: dict[int, ColorRGBA] = {}
+
+        indices = self.grid.target_flat_indices()
+        self._target_flat_indices = [int(fi) for fi in indices]
+        nx, ny, nz = self.grid.shape
+        for fi in indices:
+            ix = int(fi) // (ny * nz)
+            rem = int(fi) % (ny * nz)
+            iy = rem // nz
+            iz = rem % nz
+            cx, cy, cz = self.grid.cell_centre(ix, iy, iz)
+
+            point_by_flat[int(fi)] = Point(x=cx, y=cy, z=cz)
+            color_by_flat[int(fi)] = reachable_color
+
+        self._target_point_by_flat = point_by_flat
+        self._target_color_by_flat = color_by_flat
+        self.get_logger().info(
+            f'Cached {len(self._target_flat_indices)} target cells; '
+            'starting background reachability scan')
+
+    def _reachability_scan_tick(self) -> None:
+        """Incrementally compute reachability colors to keep startup responsive."""
+        if self._reachability_scan_index >= len(self._target_flat_indices):
+            if self._reachability_scan_timer is not None:
+                self._reachability_scan_timer.cancel()
+                self._reachability_scan_timer = None
+            self.get_logger().info(
+                'Target reachability scan complete: '
+                f'{self._reachability_reachable} reachable, '
+                f'{self._reachability_unreachable} unreachable')
+            return
+
+        unreachable_color = ColorRGBA(r=1.0, g=0.1, b=0.1, a=0.55)
+        reachable_color = ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.55)
+
+        end = min(
+            self._reachability_scan_index + self._reachability_scan_batch,
+            len(self._target_flat_indices),
+        )
+        for idx in range(self._reachability_scan_index, end):
+            fi = self._target_flat_indices[idx]
+            pt = self._target_point_by_flat[fi]
+            reachable = check_reachability(
+                np.array([pt.x, pt.y, pt.z]),
+                base_x=self.working_position['x'],
+                base_y=self.working_position['y'],
+                base_yaw=self.working_position['yaw'],
+            )
+            if reachable:
+                self._target_color_by_flat[fi] = reachable_color
+                self._reachability_reachable += 1
+            else:
+                self._target_color_by_flat[fi] = unreachable_color
+                self._reachability_unreachable += 1
+
+        self._reachability_scan_index = end
+        self._publish_target_and_frame_markers()
 
     def _publish_excavation_markers(self) -> None:
         """Publish cubes for excavated cells (orange)."""
@@ -376,6 +449,7 @@ class WorldNode(Node):
             f'Scoop {scoop_id}: removed {result.target_cells_removed} target cells, '
             f'remaining={result.remaining_target_cells}, '
             f'completion={result.completion_fraction:.1%}')
+        self._publish_target_and_frame_markers()
         self._publish_excavation_markers()
         self._publish_grid_state()
         return result

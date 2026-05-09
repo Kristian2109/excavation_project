@@ -38,6 +38,7 @@ from excavation_core.parameters import (
     DEFAULT_AUTO_START,
     PRM_SCOOP_DELAY,
     DEFAULT_SCOOP_DELAY,
+    PRM_EXECUTION_SPEED,
 )
 
 
@@ -46,6 +47,7 @@ def generate_launch_description():
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
     execute_arm = LaunchConfiguration('execute_arm')
+    execution_speed = LaunchConfiguration('execution_speed')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
     mission_controller = Node(
@@ -67,6 +69,7 @@ def generate_launch_description():
             PRM_EXECUTE_ARM: execute_arm,
             PRM_AUTO_START: DEFAULT_AUTO_START,
             PRM_SCOOP_DELAY: DEFAULT_SCOOP_DELAY,
+            PRM_EXECUTION_SPEED: execution_speed,
             'use_sim_time': use_sim_time,
         }],
     )
@@ -84,5 +87,7 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         DeclareLaunchArgument('execute_arm', default_value='true',
                               description='Set false for headless / grid-only mode'),
+        DeclareLaunchArgument('execution_speed', default_value='1.0',
+                              description='Mission speed multiplier (e.g. 2.0 = ~2x faster)'),
         delayed_mission,
     ])

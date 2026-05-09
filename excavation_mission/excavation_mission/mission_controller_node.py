@@ -25,6 +25,9 @@ Parameters
         Immediately start the mission (base motion already running).
     scoop_delay (float, default 0.5)
         Minimum seconds between consecutive scoops (headless mode only).
+    execution_speed (float, default 1.0)
+        Speed multiplier for excavation execution timing.
+        Example: 2.0 runs about 2x faster, 0.5 runs about 2x slower.
 """
 
 from __future__ import annotations
@@ -101,6 +104,11 @@ class MissionControllerNode(Node):
         # ----- Cache mission parameters -----
         self._execute_arm = params.execute_arm
         self._scoop_delay = params.scoop_delay
+        self._execution_speed = float(params.execution_speed)
+        if self._execution_speed <= 0.0:
+            self.get_logger().warn(
+                f'Invalid execution_speed={self._execution_speed}; using 1.0')
+            self._execution_speed = 1.0
 
         # ----- Scoop execution tracking -----
         self._scoop_active = False
@@ -142,7 +150,8 @@ class MissionControllerNode(Node):
 
         self._publish_status()
         self.get_logger().info(
-            f'MissionController ready  (execute_arm={self._execute_arm})')
+            f'MissionController ready  (execute_arm={self._execute_arm}, '
+            f'execution_speed={self._execution_speed:.2f}x)')
 
     # ------------------------------------------------------------------ #
     #  Tick – main loop
@@ -155,7 +164,8 @@ class MissionControllerNode(Node):
 
         elif state == MissionState.EXCAVATING and not self._scoop_active:
             # Enforce minimum delay between scoops
-            if time.monotonic() - self._last_scoop_time >= self._scoop_delay:
+            effective_delay = self._scoop_delay / self._execution_speed
+            if time.monotonic() - self._last_scoop_time >= effective_delay:
                 self._advance_excavation()
 
         self._publish_status()
@@ -276,7 +286,8 @@ class MissionControllerNode(Node):
 
         self.get_logger().info(
             f'Sending arm trajectory ({len(jt.points)} waypoints, '
-            f'{self._trajectory_duration(traj):.1f}s)')
+            f'{self._trajectory_duration(traj):.1f}s at '
+            f'{self._execution_speed:.2f}x)')
 
         send_future = self._action_client.send_goal_async(goal)
         send_future.add_done_callback(self._on_goal_response)
@@ -318,13 +329,12 @@ class MissionControllerNode(Node):
     # ------------------------------------------------------------------ #
     #  Trajectory helpers
     # ------------------------------------------------------------------ #
-    @staticmethod
-    def _build_joint_trajectory(traj: ScoopTrajectory) -> JointTrajectory:
+    def _build_joint_trajectory(self, traj: ScoopTrajectory) -> JointTrajectory:
         jt = JointTrajectory()
         jt.joint_names = list(JOINT_NAMES)
         cumulative = 0.0
         for wp in traj.waypoints:
-            cumulative += wp.duration
+            cumulative += wp.duration / self._execution_speed
             pt = JointTrajectoryPoint()
             pt.positions = wp.joint_positions.tolist()
             pt.velocities = [0.0] * len(JOINT_NAMES)
@@ -335,9 +345,8 @@ class MissionControllerNode(Node):
             jt.points.append(pt)
         return jt
 
-    @staticmethod
-    def _trajectory_duration(traj: ScoopTrajectory) -> float:
-        return sum(wp.duration for wp in traj.waypoints)
+    def _trajectory_duration(self, traj: ScoopTrajectory) -> float:
+        return sum(wp.duration for wp in traj.waypoints) / self._execution_speed
 
     # ------------------------------------------------------------------ #
     #  Grid update publisher
@@ -453,7 +462,7 @@ class MissionControllerNode(Node):
         m.pose.orientation.w = 1.0
         m.points = points
         # Lifetime = one scoop duration so it auto-deletes
-        total_dur = sum(wp.duration for wp in traj.waypoints)
+        total_dur = self._trajectory_duration(traj)
         m.lifetime.sec = int(total_dur) + 2
         ma.markers.append(m)
 

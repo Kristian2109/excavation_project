@@ -32,6 +32,7 @@ def generate_launch_description():
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
     execute_arm = LaunchConfiguration('execute_arm')
+    execution_speed = LaunchConfiguration('execution_speed')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
     # --- Control stack (robot + ros2_control + Foxglove) ---
@@ -81,6 +82,7 @@ def generate_launch_description():
             'goal_y': goal_y,
             'goal_yaw': goal_yaw,
             'execute_arm': execute_arm,
+            'execution_speed': execution_speed,
         }.items(),
     )
 
@@ -109,6 +111,8 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         DeclareLaunchArgument('execute_arm', default_value='true',
                               description='Set false for headless / grid-only mode'),
+        DeclareLaunchArgument('execution_speed', default_value='1.0',
+                      description='Mission speed multiplier (e.g. 2.0 = ~2x faster)'),
 
         control_launch,
         world_launch,
