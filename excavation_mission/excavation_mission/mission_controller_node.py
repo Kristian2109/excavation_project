@@ -182,6 +182,37 @@ class MissionControllerNode(Node):
                 f'Planning failed: {self.controller.progress.status_text}')
             return
 
+        # In arm mode, pre-filter unreachable scoops so execution only
+        # attempts physically feasible trajectories. This reduces erratic
+        # motion and repeated runtime IK failures.
+        if self._execute_arm and self.controller.plan is not None:
+            reachable_scoops = []
+            for scoop in self.controller.plan.scoops:
+                traj = plan_single_scoop(
+                    scoop.dig_target,
+                    base_x=self.controller.base_x,
+                    base_y=self.controller.base_y,
+                    base_yaw=self.controller.base_yaw,
+                    scoop_id=scoop.scoop_id,
+                )
+                if traj is not None:
+                    scoop.trajectory = traj
+                    reachable_scoops.append(scoop)
+
+            removed = len(self.controller.plan.scoops) - len(reachable_scoops)
+            self.controller.plan.scoops = reachable_scoops
+            self.controller.progress.total_scoops = len(reachable_scoops)
+            self.controller.progress.current_scoop_index = 0
+
+            if removed > 0:
+                self.get_logger().warn(
+                    f'Filtered {removed} unreachable scoops during planning')
+
+            if len(reachable_scoops) == 0:
+                self.controller.abort('No reachable scoops for current base pose')
+                self._publish_status()
+                return
+
         plan = self.controller.plan
         cov = plan.coverage_fraction(self.controller.grid)
         self.get_logger().info(
@@ -214,19 +245,20 @@ class MissionControllerNode(Node):
             self._last_scoop_time = time.monotonic()
             return
 
-        # -- Arm mode: build trajectory via IK --
-        traj = plan_single_scoop(
-            scoop.dig_target,
-            base_x=self.controller.base_x,
-            base_y=self.controller.base_y,
-            base_yaw=self.controller.base_yaw,
-            scoop_id=scoop.scoop_id,
-        )
+        # -- Arm mode: use pre-planned trajectory when available --
+        traj = scoop.trajectory
+        if traj is None:
+            traj = plan_single_scoop(
+                scoop.dig_target,
+                base_x=self.controller.base_x,
+                base_y=self.controller.base_y,
+                base_yaw=self.controller.base_yaw,
+                scoop_id=scoop.scoop_id,
+            )
 
         if traj is None:
             self.get_logger().warn(
                 f'Scoop {scoop.scoop_id}: IK failed — skipping')
-            self._publish_scoop_action(scoop)
             self.controller.on_scoop_completed(False)
             self._last_scoop_time = time.monotonic()
             return
@@ -274,7 +306,10 @@ class MissionControllerNode(Node):
 
     def _finish_scoop(self, success: bool) -> None:
         """Common finalisation after a scoop attempt."""
-        self._publish_scoop_action(self._current_scoop)
+        # Only apply terrain change when arm execution actually succeeded.
+        # This prevents "free" excavation when trajectories fail/reject.
+        if success:
+            self._publish_scoop_action(self._current_scoop)
         self.controller.on_scoop_completed(success)
         self._scoop_active = False
         self._current_scoop = None
