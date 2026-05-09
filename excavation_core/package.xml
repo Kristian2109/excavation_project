@@ -1,22 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>excavation_world</name>
+  <name>excavation_core</name>
   <version>0.0.0</version>
-  <description>ROS 2 node for excavation grid state and visualization (world service)</description>
+  <description>Pure Python simulation and computation library (no ROS dependencies)</description>
   <maintainer email="kpetrov@quickbase.com">root</maintainer>
   <license>TODO: License declaration</license>
 
-  <!-- ROS dependencies -->
-  <depend>rclpy</depend>
-  <depend>std_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>visualization_msgs</depend>
-  <depend>excavation_msgs</depend>
-  <depend>tf2_ros</depend>
-  
-  <!-- Core library dependency -->
-  <depend>excavation_core</depend>
+  <!-- No ROS dependencies - pure Python only -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
@@ -24,7 +17,6 @@
   <test_depend>python3-pytest</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>
-

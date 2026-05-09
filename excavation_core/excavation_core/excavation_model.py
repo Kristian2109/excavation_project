@@ -19,8 +19,8 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from excavation_world.excavation_grid import ExcavationGrid
-from excavation_world.scoop_trajectory import (
+from excavation_core.excavation_grid import ExcavationGrid
+from excavation_core.scoop_trajectory import (
     ScoopTrajectory,
 )
 

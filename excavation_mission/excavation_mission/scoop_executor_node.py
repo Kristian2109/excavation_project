@@ -33,11 +33,11 @@ from excavation_msgs.msg import ScoopAction as ScoopActionMsg
 
 import numpy as np
 
-from excavation_world.scoop_trajectory import (
+from excavation_core.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
 )
-from excavation_world.robot_model import JOINT_NAMES
+from excavation_core.robot_model import JOINT_NAMES
 
 
 class ScoopExecutorNode(Node):

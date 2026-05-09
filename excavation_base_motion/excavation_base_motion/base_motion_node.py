@@ -34,7 +34,7 @@ from std_msgs.msg import Bool
 
 from tf2_ros import TransformBroadcaster
 
-from excavation_world.base_planner import (
+from excavation_core.base_planner import (
     BasePose,
     plan_base_trajectory,
 )

@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'excavation_world'
+package_name = 'excavation_mission'
 
 setup(
     name=package_name,
@@ -19,7 +19,7 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='kpetrov@quickbase.com',
-    description='ROS 2 node for excavation grid state and visualization',
+    description='ROS 2 nodes for mission planning and scoop execution',
     license='TODO: License declaration',
     extras_require={
         'test': [
@@ -28,7 +28,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'world_node = excavation_world.world_node:main',
+            'mission_controller_node = excavation_mission.mission_controller_node:main',
+            'scoop_executor_node = excavation_mission.scoop_executor_node:main',
         ],
     },
 )

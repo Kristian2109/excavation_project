@@ -23,10 +23,10 @@ from typing import List, Optional
 
 import numpy as np
 
-from excavation_world.ik_solver import (
+from excavation_core.ik_solver import (
     solve_ik_nearest,
 )
-from excavation_world.robot_model import ExcavatorModel, JOINT_NAMES
+from excavation_core.robot_model import ExcavatorModel, JOINT_NAMES
 
 
 # ====================================================================== #

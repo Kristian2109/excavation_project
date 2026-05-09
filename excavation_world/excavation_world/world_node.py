@@ -32,11 +32,11 @@ from tf2_ros import StaticTransformBroadcaster
 from excavation_msgs.msg import ScoopAction as ScoopActionMsg
 from excavation_msgs.msg import ExcavationGrid as ExcavationGridMsg
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
-from excavation_world.excavation_model import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
+from excavation_core.excavation_model import (
     apply_scoop_to_grid,
 )
-from excavation_world.parameters import (
+from excavation_core.parameters import (
     declare_world_node_parameters,
     retrieve_world_node_parameters,
 )

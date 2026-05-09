@@ -51,18 +51,18 @@ from excavation_msgs.msg import (
     ScoopAction as ScoopActionMsg,
 )
 
-from excavation_world.mission_controller import (
+from excavation_core.mission_controller import (
     MissionController,
     MissionState,
 )
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_world.excavation_planner import PlannedScoop
-from excavation_world.scoop_trajectory import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
+from excavation_core.excavation_planner import PlannedScoop
+from excavation_core.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
 )
-from excavation_world.robot_model import JOINT_NAMES, ExcavatorModel
-from excavation_world.parameters import (
+from excavation_core.robot_model import JOINT_NAMES, ExcavatorModel
+from excavation_core.parameters import (
     declare_mission_controller_node_parameters,
     retrieve_mission_controller_node_parameters,
 )

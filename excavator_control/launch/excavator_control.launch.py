@@ -42,6 +42,7 @@ def generate_launch_description():
     goal_x = LaunchConfiguration('goal_x')
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
+    foxglove_port = LaunchConfiguration('foxglove_port')
 
     # --- Nodes ---
 
@@ -69,7 +70,8 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Spawn controllers after controller_manager is up
+    # Spawn controllers after controller_manager is up.
+    # Spawn sequentially (not in parallel) to avoid race conditions.
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
@@ -92,14 +94,14 @@ def generate_launch_description():
         name='foxglove_bridge',
         output='screen',
         parameters=[{
-            'port': 8765,
+            'port': foxglove_port,
             'use_sim_time': use_sim_time,
         }],
     )
 
     # Base motion node – drives base from start to working position
     base_motion_node = Node(
-        package='excavation_world',
+        package='excavation_base_motion',
         executable='base_motion_node',
         name='base_motion',
         output='screen',
@@ -117,10 +119,15 @@ def generate_launch_description():
         }],
     )
 
-    # Delay spawners so controller_manager has time to initialise
-    delayed_spawners = TimerAction(
+    # Delay spawners so controller_manager has time to initialise.
+    delayed_joint_state_spawner = TimerAction(
         period=8.0,
-        actions=[joint_state_broadcaster_spawner, arm_controller_spawner],
+        actions=[joint_state_broadcaster_spawner],
+    )
+
+    delayed_arm_spawner = TimerAction(
+        period=10.0,
+        actions=[arm_controller_spawner],
     )
 
     return LaunchDescription([
@@ -128,10 +135,12 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_x', default_value='2.0'),
         DeclareLaunchArgument('goal_y', default_value='-0.5'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
+        DeclareLaunchArgument('foxglove_port', default_value='8765'),
 
         robot_state_publisher,
         controller_manager,
         base_motion_node,
-        delayed_spawners,
+        delayed_joint_state_spawner,
+        delayed_arm_spawner,
         foxglove_bridge,
     ])

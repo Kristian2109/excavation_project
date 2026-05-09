@@ -21,13 +21,13 @@ from enum import IntEnum
 from dataclasses import dataclass, field
 from typing import Optional
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_world.excavation_planner import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
+from excavation_core.excavation_planner import (
     ExcavationPlan,
     PlannedScoop,
     plan_excavation,
 )
-from excavation_world.excavation_model import ScoopFootprint
+from excavation_core.excavation_model import ScoopFootprint
 
 
 # ====================================================================== #

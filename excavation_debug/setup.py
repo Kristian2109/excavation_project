@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'excavation_world'
+package_name = 'excavation_debug'
 
 setup(
     name=package_name,
@@ -19,7 +19,7 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='kpetrov@quickbase.com',
-    description='ROS 2 node for excavation grid state and visualization',
+    description='ROS 2 nodes for debugging and visualization utilities',
     license='TODO: License declaration',
     extras_require={
         'test': [
@@ -28,7 +28,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'world_node = excavation_world.world_node:main',
+            'debug_visualizer_node = excavation_debug.debug_visualizer_node:main',
+            'raw_urdf_publisher = excavation_debug.raw_urdf_publisher:main',
         ],
     },
 )

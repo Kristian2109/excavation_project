@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>excavation_world</name>
+  <name>excavation_base_motion</name>
   <version>0.0.0</version>
-  <description>ROS 2 node for excavation grid state and visualization (world service)</description>
+  <description>ROS 2 node for robot base motion and movement control</description>
   <maintainer email="kpetrov@quickbase.com">root</maintainer>
   <license>TODO: License declaration</license>
 
@@ -12,9 +12,7 @@
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>visualization_msgs</depend>
-  <depend>excavation_msgs</depend>
-  <depend>tf2_ros</depend>
-  
+
   <!-- Core library dependency -->
   <depend>excavation_core</depend>
 
@@ -27,4 +25,3 @@
     <build_type>ament_python</build_type>
   </export>
 </package>
-

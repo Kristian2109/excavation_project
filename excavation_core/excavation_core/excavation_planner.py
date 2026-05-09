@@ -30,12 +30,12 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from excavation_world.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_world.excavation_model import (
+from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
+from excavation_core.excavation_model import (
     ScoopFootprint,
     compute_scoop_cells,
 )
-from excavation_world.scoop_trajectory import (
+from excavation_core.scoop_trajectory import (
     ScoopTrajectory,
     plan_single_scoop,
 )

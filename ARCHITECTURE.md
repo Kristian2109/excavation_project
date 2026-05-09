@@ -11,8 +11,32 @@ The system is split into **5 ROS 2 packages**:
 | `excavator_description` | C++/Xacro | URDF robot model |
 | `excavator_control` | C++/YAML | ros2_control config + launch |
 | `excavation_msgs` | C++ (IDL) | Custom message definitions |
-| `excavation_world` | Python | All logic: libraries + ROS nodes |
+The **excavation software** is now split into 5 focused packages:
+
+| Package | Language | Role |
+|---------|----------|------|
+| `excavation_core` | Python | Pure-Python libraries (no ROS) |
+| `excavation_world` | Python | Grid state & visualization ROS node |
+| `excavation_base_motion` | Python | Robot base motion ROS node |
+| `excavation_mission` | Python | Mission orchestration ROS nodes |
+| `excavation_debug` | Python | Debug visualization ROS nodes |
 | `excavator_moveit_config` | C++ | MoveIt 2 config (generated, not used at runtime) |
+
+**Dependency Graph**:
+```
+excavation_core (pure Python, no ROS)
+  ↓ depends on
+excavation_world, excavation_base_motion, excavation_mission, excavation_debug
+  ↓ all ROS-wrapped packages
+excavation_msgs (custom message types)
+```
+
+**Advantages of this structure**:
+- **Separation of concerns**: Libraries vs. ROS wrappers are clearly separated
+- **Testability**: excavation_core is pure Python, can be tested without ROS
+- **Reusability**: excavation_core can be used in non-ROS contexts
+- **Scalability**: Easy to add new mission types, debug tools, or hardware adapters
+- **Maintainability**: Each package has one clear responsibility
 
 ```
 excavation_project/

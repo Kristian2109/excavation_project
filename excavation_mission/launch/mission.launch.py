@@ -1,0 +1,95 @@
+"""
+Launch mission controller node — orchestrates excavation mission execution.
+
+Usage
+-----
+Full mission (arm execution):
+    ros2 launch excavation_mission mission.launch.py
+
+Headless (grid-only, no arm):
+    ros2 launch excavation_mission mission.launch.py execute_arm:=false
+"""
+
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+from excavation_core.parameters import (
+    PRM_RESOLUTION,
+    DEFAULT_RESOLUTION,
+    PRM_HOLE_ORIGIN_X,
+    DEFAULT_HOLE_ORIGIN_X,
+    PRM_HOLE_ORIGIN_Y,
+    DEFAULT_HOLE_ORIGIN_Y,
+    PRM_HOLE_ORIGIN_Z,
+    DEFAULT_HOLE_ORIGIN_Z,
+    PRM_HOLE_SIZE_X,
+    DEFAULT_HOLE_SIZE_X,
+    PRM_HOLE_SIZE_Y,
+    DEFAULT_HOLE_SIZE_Y,
+    PRM_HOLE_DEPTH,
+    DEFAULT_HOLE_DEPTH,
+    PRM_BASE_X,
+    DEFAULT_BASE_X,
+    PRM_BASE_Y,
+    DEFAULT_BASE_Y,
+    PRM_BASE_YAW,
+    DEFAULT_BASE_YAW,
+    PRM_EXECUTE_ARM,
+    DEFAULT_EXECUTE_ARM,
+    PRM_AUTO_START,
+    DEFAULT_AUTO_START,
+    PRM_SCOOP_DELAY,
+    DEFAULT_SCOOP_DELAY,
+    PRM_ARM_TIMEOUT,
+    DEFAULT_ARM_TIMEOUT,
+)
+
+
+def generate_launch_description():
+    goal_x = LaunchConfiguration('goal_x')
+    goal_y = LaunchConfiguration('goal_y')
+    goal_yaw = LaunchConfiguration('goal_yaw')
+    execute_arm = LaunchConfiguration('execute_arm')
+    use_sim_time = LaunchConfiguration('use_sim_time')
+
+    mission_controller = Node(
+        package='excavation_mission',
+        executable='mission_controller_node',
+        name='mission_controller',
+        output='screen',
+        parameters=[{
+            PRM_HOLE_ORIGIN_X: DEFAULT_HOLE_ORIGIN_X,
+            PRM_HOLE_ORIGIN_Y: DEFAULT_HOLE_ORIGIN_Y,
+            PRM_HOLE_ORIGIN_Z: DEFAULT_HOLE_ORIGIN_Z,
+            PRM_HOLE_SIZE_X: DEFAULT_HOLE_SIZE_X,
+            PRM_HOLE_SIZE_Y: DEFAULT_HOLE_SIZE_Y,
+            PRM_HOLE_DEPTH: DEFAULT_HOLE_DEPTH,
+            PRM_RESOLUTION: DEFAULT_RESOLUTION,
+            PRM_BASE_X: goal_x,
+            PRM_BASE_Y: goal_y,
+            PRM_BASE_YAW: goal_yaw,
+            PRM_EXECUTE_ARM: execute_arm,
+            PRM_AUTO_START: DEFAULT_AUTO_START,
+            PRM_SCOOP_DELAY: DEFAULT_SCOOP_DELAY,
+            PRM_ARM_TIMEOUT: DEFAULT_ARM_TIMEOUT,
+            'use_sim_time': use_sim_time,
+        }],
+    )
+
+    # Delay so that arm_controller is ready
+    delayed_mission = TimerAction(
+        period=14.0,
+        actions=[mission_controller],
+    )
+
+    return LaunchDescription([
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('goal_x', default_value='2.0'),
+        DeclareLaunchArgument('goal_y', default_value='-0.5'),
+        DeclareLaunchArgument('goal_yaw', default_value='0.0'),
+        DeclareLaunchArgument('execute_arm', default_value='true',
+                              description='Set false for headless / grid-only mode'),
+        delayed_mission,
+    ])

@@ -34,8 +34,8 @@ from excavation_msgs.msg import (
     ExcavationGrid as ExcavationGridMsg,
 )
 
-from excavation_world.robot_model import ExcavatorModel, JOINT_NAMES
-from excavation_world.parameters import (
+from excavation_core.robot_model import ExcavatorModel, JOINT_NAMES
+from excavation_core.parameters import (
     declare_debug_visualizer_node_parameters,
     retrieve_debug_visualizer_node_parameters,
 )
