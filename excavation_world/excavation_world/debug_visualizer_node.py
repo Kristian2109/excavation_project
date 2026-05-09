@@ -35,6 +35,10 @@ from excavation_msgs.msg import (
 )
 
 from excavation_world.robot_model import ExcavatorModel, JOINT_NAMES
+from excavation_world.parameters import (
+    declare_debug_visualizer_node_parameters,
+    retrieve_debug_visualizer_node_parameters,
+)
 
 import numpy as np
 
@@ -45,17 +49,17 @@ class DebugVisualizerNode(Node):
     def __init__(self) -> None:
         super().__init__('debug_visualizer')
 
-        # Parameters
-        self.declare_parameter('base_x', 2.0)
-        self.declare_parameter('base_y', -0.5)
-        self.declare_parameter('base_yaw', 0.0)
-        self.declare_parameter('trail_max_points', 2000)
-        self.declare_parameter('publish_rate', 4.0)
+        # ----- Declare all parameters at once (single source of truth) -----
+        declare_debug_visualizer_node_parameters(self)
 
-        self.base_x = float(self.get_parameter('base_x').value)
-        self.base_y = float(self.get_parameter('base_y').value)
-        self.base_yaw = float(self.get_parameter('base_yaw').value)
-        self.trail_max = int(self.get_parameter('trail_max_points').value)
+        # ----- Read all parameters at once (validated + type-safe) -----
+        params = retrieve_debug_visualizer_node_parameters(self)
+
+        # ----- Store base position & trail parameters -----
+        self.base_x = params.base_position.base_x
+        self.base_y = params.base_position.base_y
+        self.base_yaw = params.base_position.base_yaw
+        self.trail_max = params.trail_max_points
 
         # State
         self._joint_positions: dict[str, float] = {}
@@ -79,8 +83,7 @@ class DebugVisualizerNode(Node):
             ExcavationGridMsg, '/excavation/grid_state', self._grid_cb, 10)
 
         # Timer
-        rate = float(self.get_parameter('publish_rate').value)
-        self.create_timer(1.0 / rate, self._tick)
+        self.create_timer(1.0 / params.publish_rate, self._tick)
 
         self.get_logger().info('DebugVisualizer ready')
 

@@ -36,6 +36,10 @@ from excavation_world.excavation_grid import ExcavationGrid, HoleSpec, EXCAVATED
 from excavation_world.excavation_model import (
     apply_scoop_to_grid,
 )
+from excavation_world.parameters import (
+    declare_world_node_parameters,
+    retrieve_world_node_parameters,
+)
 
 import math
 import numpy as np
@@ -47,41 +51,32 @@ class WorldNode(Node):
     def __init__(self) -> None:
         super().__init__('excavation_world')
 
-        # --- Declare parameters ---
-        self.declare_parameter('resolution', 0.25)
-        self.declare_parameter('hole_origin_x', 5.0)
-        self.declare_parameter('hole_origin_y', -2.0)
-        self.declare_parameter('hole_origin_z', 0.0)
-        self.declare_parameter('hole_size_x', 1.0)
-        self.declare_parameter('hole_size_y', 1.0)
-        self.declare_parameter('hole_depth', 1.0)
-        self.declare_parameter('publish_rate', 2.0)
-        self.declare_parameter('working_position_x', 2.0)
-        self.declare_parameter('working_position_y', -0.5)
-        self.declare_parameter('working_position_z', 0.0)
-        self.declare_parameter('working_position_yaw', 0.0)
+        # --- Declare all parameters at once (single source of truth) ---
+        declare_world_node_parameters(self)
 
-        # --- Read parameters ---
-        res = self.get_parameter('resolution').value
+        # --- Read all parameters at once (validated + type-safe) ---
+        params = retrieve_world_node_parameters(self)
+        self.get_logger().info(f'Parameters loaded: resolution={params.hole_geometry.resolution}')
+
+        # --- Build grid from hole geometry ---
         hole = HoleSpec(
-            origin_x=self.get_parameter('hole_origin_x').value,
-            origin_y=self.get_parameter('hole_origin_y').value,
-            origin_z=self.get_parameter('hole_origin_z').value,
-            size_x=self.get_parameter('hole_size_x').value,
-            size_y=self.get_parameter('hole_size_y').value,
-            depth=self.get_parameter('hole_depth').value,
+            origin_x=params.hole_geometry.hole_origin_x,
+            origin_y=params.hole_geometry.hole_origin_y,
+            origin_z=params.hole_geometry.hole_origin_z,
+            size_x=params.hole_geometry.hole_size_x,
+            size_y=params.hole_geometry.hole_size_y,
+            depth=params.hole_geometry.hole_depth,
         )
-
-        # --- Build grid ---
-        self.grid = ExcavationGrid.from_hole_spec(hole, resolution=res)
+        self.grid = ExcavationGrid.from_hole_spec(hole, resolution=params.hole_geometry.resolution)
         self.get_logger().info(f'Initialised: {self.grid}')
 
-        # Store working position for other nodes
+        # --- Cache working position & hole geometry for later use ---
+        self._params = params
         self.working_position = {
-            'x': self.get_parameter('working_position_x').value,
-            'y': self.get_parameter('working_position_y').value,
-            'z': self.get_parameter('working_position_z').value,
-            'yaw': self.get_parameter('working_position_yaw').value,
+            'x': params.working_position.working_position_x,
+            'y': params.working_position.working_position_y,
+            'z': params.working_position.working_position_z,
+            'yaw': params.working_position.working_position_yaw,
         }
 
         # --- Publishers ---
@@ -110,7 +105,7 @@ class WorldNode(Node):
 
         # --- Timers ---
         # Fast timer: grid state only (lightweight, no markers)
-        rate = self.get_parameter('publish_rate').value
+        rate = params.publish_rate
         self.create_timer(1.0 / rate, self._fast_timer_cb)
 
         # Slow timer: republish static markers as keepalive for late
@@ -228,12 +223,12 @@ class WorldNode(Node):
         ma.markers.append(marker)
 
         # --- Hole frame (lines + text) ---
-        ox = self.get_parameter('hole_origin_x').value
-        oy = self.get_parameter('hole_origin_y').value
-        oz = self.get_parameter('hole_origin_z').value
-        sx = self.get_parameter('hole_size_x').value
-        sy = self.get_parameter('hole_size_y').value
-        depth = self.get_parameter('hole_depth').value
+        ox = self._params.hole_geometry.hole_origin_x
+        oy = self._params.hole_geometry.hole_origin_y
+        oz = self._params.hole_geometry.hole_origin_z
+        sx = self._params.hole_geometry.hole_size_x
+        sy = self._params.hole_geometry.hole_size_y
+        depth = self._params.hole_geometry.hole_depth
 
         # Top rectangle
         m = Marker()

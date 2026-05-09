@@ -62,6 +62,10 @@ from excavation_world.scoop_trajectory import (
     plan_single_scoop,
 )
 from excavation_world.robot_model import JOINT_NAMES, ExcavatorModel
+from excavation_world.parameters import (
+    declare_mission_controller_node_parameters,
+    retrieve_mission_controller_node_parameters,
+)
 
 
 class MissionControllerNode(Node):
@@ -70,46 +74,36 @@ class MissionControllerNode(Node):
     def __init__(self) -> None:
         super().__init__('mission_controller')
 
-        # ----- Parameters -----
-        self.declare_parameter('hole_origin_x', 5.0)
-        self.declare_parameter('hole_origin_y', -2.0)
-        self.declare_parameter('hole_origin_z', 0.0)
-        self.declare_parameter('hole_size_x', 1.0)
-        self.declare_parameter('hole_size_y', 1.0)
-        self.declare_parameter('hole_depth', 1.0)
-        self.declare_parameter('resolution', 0.25)
-        self.declare_parameter('base_x', 2.0)
-        self.declare_parameter('base_y', -0.5)
-        self.declare_parameter('base_yaw', 0.0)
-        self.declare_parameter('execute_arm', True)
-        self.declare_parameter('auto_start', True)
-        self.declare_parameter('scoop_delay', 0.5)
-        self.declare_parameter('arm_timeout', 30.0)
+        # ----- Declare all parameters at once (single source of truth) -----
+        declare_mission_controller_node_parameters(self)
 
+        # ----- Read all parameters at once (validated + type-safe) -----
+        params = retrieve_mission_controller_node_parameters(self)
+        self.get_logger().info(f'Parameters loaded: hole_depth={params.hole_geometry.hole_depth}m')
+
+        # ----- Build hole spec & grid -----
         hole = HoleSpec(
-            origin_x=self.get_parameter('hole_origin_x').value,
-            origin_y=self.get_parameter('hole_origin_y').value,
-            origin_z=self.get_parameter('hole_origin_z').value,
-            size_x=self.get_parameter('hole_size_x').value,
-            size_y=self.get_parameter('hole_size_y').value,
-            depth=self.get_parameter('hole_depth').value,
+            origin_x=params.hole_geometry.hole_origin_x,
+            origin_y=params.hole_geometry.hole_origin_y,
+            origin_z=params.hole_geometry.hole_origin_z,
+            size_x=params.hole_geometry.hole_size_x,
+            size_y=params.hole_geometry.hole_size_y,
+            depth=params.hole_geometry.hole_depth,
         )
-        resolution = float(self.get_parameter('resolution').value)
-        grid = ExcavationGrid.from_hole_spec(hole, resolution=resolution)
-
-        base_x = float(self.get_parameter('base_x').value)
-        base_y = float(self.get_parameter('base_y').value)
-        base_yaw = float(self.get_parameter('base_yaw').value)
-
-        self._execute_arm = bool(self.get_parameter('execute_arm').value)
-        self._scoop_delay = float(self.get_parameter('scoop_delay').value)
-        self._arm_timeout = float(self.get_parameter('arm_timeout').value)
+        grid = ExcavationGrid.from_hole_spec(hole, resolution=params.hole_geometry.resolution)
 
         # ----- State machine -----
         self.controller = MissionController(
             hole=hole, grid=grid,
-            base_x=base_x, base_y=base_y, base_yaw=base_yaw,
+            base_x=params.base_position.base_x,
+            base_y=params.base_position.base_y,
+            base_yaw=params.base_position.base_yaw,
         )
+
+        # ----- Cache mission parameters -----
+        self._execute_arm = params.execute_arm
+        self._scoop_delay = params.scoop_delay
+        self._arm_timeout = params.arm_timeout
 
         # ----- Scoop execution tracking -----
         self._scoop_active = False
@@ -145,7 +139,7 @@ class MissionControllerNode(Node):
         self.create_timer(0.5, self._tick)
 
         # ----- Auto-start -----
-        if self.get_parameter('auto_start').value:
+        if params.auto_start:
             self.controller.start_mission()
             self.get_logger().info('Mission auto-started → MOVING_TO_WORK_POS')
 
