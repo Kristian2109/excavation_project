@@ -50,8 +50,8 @@ SHOULDER_X_LOCAL = CABIN_LENGTH           # 1.0 m forward
 SHOULDER_Z_LOCAL = CHASSIS_HEIGHT + CABIN_HEIGHT * 0.8  # 0.5 + 0.64 = 1.14 m up
 
 # Arm link lengths used in 2-link IK
-L1 = BOOM_LENGTH    # 3.0 m  (boom)
-L2 = STICK_LENGTH   # 2.5 m  (stick)
+L1 = BOOM_LENGTH    # 3.5 m  (boom)
+L2 = STICK_LENGTH   # 2.9 m  (stick)
 
 
 # ====================================================================== #

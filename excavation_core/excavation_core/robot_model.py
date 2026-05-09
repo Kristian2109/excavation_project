@@ -6,9 +6,9 @@ The kinematic chain is:
 
 Actuated joints (from the URDF):
     cabin_joint  – continuous, axis Z  (swing)
-    boom_joint   – revolute,  axis Y  (limits: -0.3 … 1.2)
-    stick_joint  – revolute,  axis Y  (limits: -2.4 … 0.0)
-    bucket_joint – revolute,  axis Y  (limits: -1.0 … 2.2)
+    boom_joint   – revolute,  axis Y  (limits: -0.5 … 1.5)
+    stick_joint  – revolute,  axis Y  (limits: -2.7 … 0.3)
+    bucket_joint – revolute,  axis Y  (limits: -1.5 … 2.5)
 
 This module is ROS-free and can be tested standalone.
 """
@@ -119,8 +119,8 @@ def rotation_about_axis(axis: np.ndarray, angle: float) -> np.ndarray:
 CHASSIS_HEIGHT = 0.5
 CABIN_LENGTH   = 1.0
 CABIN_HEIGHT   = 0.8
-BOOM_LENGTH    = 3.0
-STICK_LENGTH   = 2.5
+BOOM_LENGTH    = 3.5
+STICK_LENGTH   = 2.9
 BUCKET_LENGTH  = 0.8
 BUCKET_DEPTH   = 0.5
 
@@ -144,21 +144,21 @@ def _build_joint_defs() -> Dict[str, JointDef]:
             axis=np.array([0.0, 1.0, 0.0]),
             origin_xyz=np.array([CABIN_LENGTH, 0.0, CABIN_HEIGHT * 0.8]),
             origin_rpy=np.array([0.0, 0.0, 0.0]),
-            lower=-0.3, upper=1.2,
+            lower=-0.5, upper=1.5,
         ),
         'stick_joint': JointDef(
             name='stick_joint',
             axis=np.array([0.0, 1.0, 0.0]),
             origin_xyz=np.array([BOOM_LENGTH, 0.0, 0.0]),
             origin_rpy=np.array([0.0, 0.0, 0.0]),
-            lower=-2.4, upper=0.0,
+            lower=-2.7, upper=0.3,
         ),
         'bucket_joint': JointDef(
             name='bucket_joint',
             axis=np.array([0.0, 1.0, 0.0]),
             origin_xyz=np.array([STICK_LENGTH, 0.0, 0.0]),
             origin_rpy=np.array([0.0, 0.0, 0.0]),
-            lower=-1.0, upper=2.2,
+            lower=-1.5, upper=2.5,
         ),
     }
 

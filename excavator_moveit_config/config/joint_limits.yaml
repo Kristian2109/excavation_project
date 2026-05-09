@@ -12,21 +12,21 @@ joint_limits:
     has_acceleration_limits: true
     max_acceleration: 0.8
     has_position_limits: true
-    min_position: -0.3
-    max_position: 1.2
+    min_position: -0.5
+    max_position: 1.5
   stick_joint:
     has_velocity_limits: true
     max_velocity: 0.5
     has_acceleration_limits: true
     max_acceleration: 0.8
     has_position_limits: true
-    min_position: -2.4
-    max_position: 0.0
+    min_position: -2.7
+    max_position: 0.3
   bucket_joint:
     has_velocity_limits: true
     max_velocity: 0.8
     has_acceleration_limits: true
     max_acceleration: 1.5
     has_position_limits: true
-    min_position: -1.0
-    max_position: 2.2
+    min_position: -1.5
+    max_position: 2.5
