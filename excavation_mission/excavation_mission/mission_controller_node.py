@@ -145,11 +145,14 @@ class MissionControllerNode(Node):
             MissionStatusMsg, '/mission/status', 10)
         self.scoop_action_pub = self.create_publisher(
             ScoopActionMsg, '/excavation/apply_scoop', 10)
+        self._goal_pub = self.create_publisher(PoseStamped, '/goal_pose', 10)
+        
+        
         self.arm_traj_pub = self.create_publisher(
             MarkerArray, '/debug/arm_trajectory', QoSProfile(depth=5))
         self.scoop_targets_pub = self.create_publisher(
             MarkerArray, '/debug/scoop_targets', QoSProfile(depth=5))
-        self._goal_pub = self.create_publisher(PoseStamped, '/goal_pose', 10)
+
 
     def _create_subscribers(self) -> None:
         """Create all subscribers used by this node."""
