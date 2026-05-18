@@ -82,7 +82,7 @@ def _bucket_tip_to_wrist(
 def _solve_two_link(
     horizontal_reach: float, vertical_drop: float, elbow_up: bool,
 ) -> Optional[tuple[float, float]]:
-    """Solve 2-link planar IK for boom and stick angles.
+    """Solve 2-link planar IK for boom and stick angles, like a normal 2D manipulator arm.
 
     Works in the vertical swing plane.  The shoulder is the origin; positive
     vertical_drop means the wrist is BELOW the shoulder.
@@ -96,7 +96,7 @@ def _solve_two_link(
     if shoulder_to_wrist > L1 + L2 or shoulder_to_wrist < abs(L1 - L2):
         return None
 
-    # Law of cosines: find the interior angle at the elbow joint
+    # Law of cosines: find the interior angle (q2) at the elbow joint
     cos_stick_angle = float(np.clip(
         (shoulder_to_wrist_sq - L1**2 - L2**2) / (2 * L1 * L2), -1.0, 1.0,
     ))
@@ -148,13 +148,10 @@ def solve_ik(
             f'Target behind robot: cabin swing {math.degrees(cabin_rotation_angle):.1f}° '
             f'exceeds ±{math.degrees(MAX_CABIN_SWING):.0f}° limit'))
 
-    # 3. Swing-plane coordinates (radial distance + height)
     distance_base_to_target = math.hypot(x_base_base_frame, y_base_base_frame)
-
-    # 4. Wrist position (subtract bucket offset)
+    
     distance_base_to_wrist, vertical_distance_base_to_wrist = _bucket_tip_to_wrist(distance_base_to_target, z_base_base_frame, bucket_angle_world)
-
-    # 5. Two-link IK (boom + stick)
+    
     distance_shoulder_to_wrist = distance_base_to_wrist - SHOULDER_X_BASE_FRAME
     vertical_distance_shoulder_to_wrist = SHOULDER_Z_BASE_FRAME - vertical_distance_base_to_wrist
 
@@ -166,11 +163,8 @@ def solve_ik(
 
     boom_angle, stick_angle = two_link
 
-    # 6. Bucket joint (psi = boom + stick + bucket)
-    psi = -bucket_angle_world
-    bucket_angle = psi - boom_angle - stick_angle
+    bucket_angle = -bucket_angle_world - boom_angle - stick_angle
 
-    # 7. Joint limit check
     joints = np.array([cabin_rotation_angle, boom_angle, stick_angle, bucket_angle])
     violation_msg = _check_joint_limits(joints)
     if violation_msg:
