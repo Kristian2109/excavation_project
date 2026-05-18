@@ -120,7 +120,7 @@ def plan_single_scoop(
         The planned trajectory, or None if any waypoint is unreachable.
     """
     target = np.asarray(dig_target_xyz, dtype=float)
-    ik_kwargs = dict(base_x=base_x, base_y=base_y, base_yaw=base_yaw)
+    ik_kwargs = dict(x_base_world_frame=base_x, y_base_world_frame=base_y, yaw_base_world_frame=base_yaw)
 
     waypoints: List[ScoopWaypoint] = []
 

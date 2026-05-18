@@ -177,28 +177,28 @@ def test_far_to_the_side():
 def test_base_offset_x():
     """Robot at x=3, target at x=7 → same local geometry as 0→4."""
     target = np.array([7.0, 0.0, 0.5])
-    result = solve_ik_nearest(target, base_x=3.0)
+    result = solve_ik_nearest(target, x_base_world_frame=3.0)
     _assert_ik_fk_roundtrip(target, result, base_x=3.0)
 
 
 def test_base_offset_xy():
     """Base offset in both x and y with a reachable target."""
     target = np.array([7.0, 4.0, 0.0])
-    result = solve_ik_nearest(target, base_x=3.0, base_y=2.0)
+    result = solve_ik_nearest(target, x_base_world_frame=3.0, y_base_world_frame=2.0)
     _assert_ik_fk_roundtrip(target, result, base_x=3.0, base_y=2.0)
 
 
 def test_base_rotated():
     """Robot facing +Y (yaw=π/2), target ahead of it."""
     target = np.array([-2.0, 4.0, 0.5])
-    result = solve_ik_nearest(target, base_yaw=math.pi / 2)
+    result = solve_ik_nearest(target, yaw_base_world_frame=math.pi / 2)
     _assert_ik_fk_roundtrip(target, result, base_yaw=math.pi / 2)
 
 
 def test_base_at_working_position():
     """From working position (3,0,0), reach toward excavation area."""
     target = np.array([7.0, 0.0, -0.5])
-    result = solve_ik_nearest(target, base_x=3.0, base_y=0.0, base_yaw=0.0)
+    result = solve_ik_nearest(target, x_base_world_frame=3.0, y_base_world_frame=0.0, yaw_base_world_frame=0.0)
     _assert_ik_fk_roundtrip(target, result, base_x=3.0, base_y=0.0)
 
 
@@ -216,7 +216,7 @@ def test_base_at_working_position():
 def test_excavation_points(x, y, z):
     """Targets inside the excavation area should be reachable."""
     target = np.array([x, y, z])
-    result = solve_ik_nearest(target, base_x=3.0, base_y=0.0, base_yaw=0.0)
+    result = solve_ik_nearest(target, x_base_world_frame=3.0, y_base_world_frame=0.0, yaw_base_world_frame=0.0)
     _assert_ik_fk_roundtrip(target, result, base_x=3.0)
 
 

@@ -267,9 +267,9 @@ class WorldNode(Node):
             pt = self._target_point_by_flat[fi]
             ik_result = solve_ik_nearest(
                 np.array([pt.x, pt.y, pt.z]),
-                base_x=self.working_position['x'],
-                base_y=self.working_position['y'],
-                base_yaw=self.working_position['yaw'],
+                x_base_world_frame=self.working_position['x'],
+                y_base_world_frame=self.working_position['y'],
+                yaw_base_world_frame=self.working_position['yaw'],
             )
             if ik_result.success:
                 self._target_reachable_by_flat[fi] = True
