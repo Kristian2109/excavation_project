@@ -144,7 +144,7 @@ def _build_joint_defs() -> Dict[str, JointDef]:
             axis=np.array([0.0, 1.0, 0.0]),
             origin_xyz=np.array([CABIN_LENGTH, 0.0, CABIN_HEIGHT * 0.8]),
             origin_rpy=np.array([0.0, 0.0, 0.0]),
-            lower=-0.5, upper=1.5,
+            lower=-1.5, upper=1.5,
         ),
         'stick_joint': JointDef(
             name='stick_joint',

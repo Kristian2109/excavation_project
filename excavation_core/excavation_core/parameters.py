@@ -25,22 +25,22 @@ PRM_RESOLUTION = 'resolution'
 DEFAULT_RESOLUTION = 0.25  # meters
 
 PRM_HOLE_ORIGIN_X = 'hole_origin_x'
-DEFAULT_HOLE_ORIGIN_X = 10.0
+DEFAULT_HOLE_ORIGIN_X = 3.0
 
 PRM_HOLE_ORIGIN_Y = 'hole_origin_y'
-DEFAULT_HOLE_ORIGIN_Y = 10.0
+DEFAULT_HOLE_ORIGIN_Y = 3.0
 
 PRM_HOLE_ORIGIN_Z = 'hole_origin_z'
 DEFAULT_HOLE_ORIGIN_Z = 0.0
 
 PRM_HOLE_SIZE_X = 'hole_size_x'
-DEFAULT_HOLE_SIZE_X = 2.0
+DEFAULT_HOLE_SIZE_X = 8.0
 
 PRM_HOLE_SIZE_Y = 'hole_size_y'
-DEFAULT_HOLE_SIZE_Y = 2.0
+DEFAULT_HOLE_SIZE_Y = 8.0
 
 PRM_HOLE_DEPTH = 'hole_depth'
-DEFAULT_HOLE_DEPTH = 4
+DEFAULT_HOLE_DEPTH = 0.2
 
 # ============================================================================
 #  WORLD NODE SPECIFIC
@@ -76,10 +76,10 @@ PRM_AUTO_START = 'auto_start'
 DEFAULT_AUTO_START = True
 
 PRM_SCOOP_DELAY = 'scoop_delay'
-DEFAULT_SCOOP_DELAY = 0.1
+DEFAULT_SCOOP_DELAY = 0.01
 
 PRM_EXECUTION_SPEED = 'execution_speed'
-DEFAULT_EXECUTION_SPEED = 50.0
+DEFAULT_EXECUTION_SPEED = 60.0
 
 # ============================================================================
 #  DEBUG VISUALIZER SPECIFIC

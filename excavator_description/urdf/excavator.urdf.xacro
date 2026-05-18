@@ -125,7 +125,7 @@
     <child  link="boom_link"/>
     <origin xyz="${cabin_length} 0 ${cabin_height * 0.8}" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <limit lower="-0.5" upper="1.5" effort="10000.0" velocity="0.5"/>
+    <limit lower="-1.5" upper="1.5" effort="10000.0" velocity="0.5"/>
     <dynamics damping="100.0" friction="20.0"/>
   </joint>
 

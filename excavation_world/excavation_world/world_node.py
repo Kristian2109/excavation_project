@@ -24,7 +24,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 
-from geometry_msgs.msg import Point, TransformStamped
+from geometry_msgs.msg import Point, PoseStamped, TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from tf2_ros import StaticTransformBroadcaster
 
@@ -104,8 +104,6 @@ class WorldNode(Node):
             MarkerArray, '/excavation/markers', marker_qos)
         self.target_marker_pub = self.create_publisher(
             MarkerArray, '/excavation/target_markers', marker_qos)
-        self.work_pos_pub = self.create_publisher(
-            Marker, '/excavation/working_position', marker_qos)
         self.grid_state_pub = self.create_publisher(
             ExcavationGridMsg, '/excavation/grid_state', 10)
 
@@ -113,6 +111,7 @@ class WorldNode(Node):
         self.create_subscription(
             ScoopActionMsg, '/excavation/apply_scoop',
             self._scoop_cb, 10)
+        self.create_subscription(PoseStamped, '/goal_pose', self._recompute_target_reachability, 10)
 
         # --- Static TF: publish a world frame so Foxglove has a ---
         # --- stable fixed frame even before base_motion_node starts ---
@@ -132,7 +131,6 @@ class WorldNode(Node):
 
         # Publish everything once immediately
         self._publish_target_and_frame_markers()
-        self._publish_working_position()
         self._publish_excavation_markers()
         self._publish_grid_state()
 
@@ -140,6 +138,41 @@ class WorldNode(Node):
         self._reachability_scan_timer = self.create_timer(
             0.05, self._reachability_scan_tick)
 
+    def _recompute_target_reachability(self, msg: PoseStamped) -> None:
+        """Recompute reachability for all target cells from a new working position.
+
+        Called when a new goal pose arrives on /goal_pose.  Extracts x/y/yaw
+        from the PoseStamped, updates ``self.working_position``, resets all
+        reachability state, and restarts the incremental scan timer.
+        """
+        q = msg.pose.orientation
+        # yaw from quaternion (rotation around Z)
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = float(np.arctan2(siny_cosp, cosy_cosp))
+
+        self.working_position = {
+            'x': msg.pose.position.x,
+            'y': msg.pose.position.y,
+            'z': msg.pose.position.z,
+            'yaw': yaw,
+        }
+        self.get_logger().info(
+            f'Working position updated: x={self.working_position["x"]:.3f}, '
+            f'y={self.working_position["y"]:.3f}, yaw={yaw:.3f} rad — '
+            'restarting reachability scan')
+
+        # Reset per-cell reachability to True (optimistic) while scan runs
+        for fi in self._target_flat_indices:
+            self._target_reachable_by_flat[fi] = True
+
+        self._reachability_scan_index = 0
+        self._reachability_reachable = 0
+        self._reachability_unreachable = 0
+        if self._reachability_scan_timer is not None:
+            self._reachability_scan_timer.cancel()
+        self._reachability_scan_timer = self.create_timer(
+            0.05, self._reachability_scan_tick)
     # ------------------------------------------------------------------ #
     #  Periodic publish
     # ------------------------------------------------------------------ #
@@ -150,7 +183,6 @@ class WorldNode(Node):
     def _slow_timer_cb(self) -> None:
         """Infrequent keepalive so late Foxglove subscribers see markers."""
         self._publish_target_and_frame_markers()
-        self._publish_working_position()
         self._publish_excavation_markers()
 
     def _initial_republish(self) -> None:
@@ -158,7 +190,6 @@ class WorldNode(Node):
         if not self._initial_done:
             self._initial_done = True
             self._publish_target_and_frame_markers()
-            self._publish_working_position()
 
     # ------------------------------------------------------------------ #
     #  Scoop subscription callback
@@ -288,13 +319,6 @@ class WorldNode(Node):
             stamp=self.get_clock().now().to_msg(),
         )
         self.marker_pub.publish(ma)
-
-    def _publish_working_position(self) -> None:
-        """Publish arrow markers at all computed working positions."""
-        now = self.get_clock().now().to_msg()
-        for m in build_working_position_markers(self._work_positions, now):
-            self.work_pos_pub.publish(m)
-
 
     # ------------------------------------------------------------------ #
     #  Public API (called by other nodes via service / direct)
