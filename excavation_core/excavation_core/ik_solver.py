@@ -71,7 +71,9 @@ def _bucket_tip_to_wrist(
 ) -> tuple[float, float]:
     """Back-compute wrist position from the bucket tip in the swing plane.
 
-    FK uses R_y where positive = down, so psi = -bucket_angle_world.
+    bucket_angle_world: desired bucket pitch in the world frame (radians).
+        0 = bucket horizontal, negative = tip pointing downward (digging pose).
+        FK uses R_y where positive = down, so psi = -bucket_angle_world.
     """
     psi = -bucket_angle_world
     r_offset = BUCKET_LENGTH * math.cos(psi) - BUCKET_DEPTH * math.sin(psi)
@@ -96,19 +98,18 @@ def _solve_two_link(
     if shoulder_to_wrist > L1 + L2 or shoulder_to_wrist < abs(L1 - L2):
         return None
 
-    # Law of cosines: find the interior angle (q2) at the elbow joint
+    # Interior angle (q2) at the elbow joint
     cos_stick_angle = float(np.clip(
         (shoulder_to_wrist_sq - L1**2 - L2**2) / (2 * L1 * L2), -1.0, 1.0,
     ))
     stick_angle = math.acos(cos_stick_angle) if elbow_up else -math.acos(cos_stick_angle)
 
-    # Boom angle = angle of shoulder→wrist line from horizontal
-    #            − angle between boom and that line (from triangle geometry)
     angle_of_shoulder_to_wrist_line = math.atan2(vertical_drop, horizontal_reach)
     angle_boom_to_wrist_line = math.atan2(
         L2 * math.sin(stick_angle),
         L1 + L2 * math.cos(stick_angle),
     )
+    # Upper angle (q1) at the shoulder joint
     boom_angle = angle_of_shoulder_to_wrist_line - angle_boom_to_wrist_line
 
     return boom_angle, stick_angle
@@ -134,6 +135,12 @@ def solve_ik(
     elbow_up: bool = True,
 ) -> IKResult:
     """Compute joint angles to place the bucket tip at *target_xyz*.
+
+    Args:
+        target_xyz: desired bucket-tip position in the world frame [x, y, z] (metres).
+        x_base_world_frame: excavator base X position in the world frame.
+        y_base_world_frame: excavator base Y position in the world frame.
+        yaw_base_world_frame: excavator heading (rotation around Z) in radians.
 
     Returns IKResult with status, joint_positions [cabin, boom, stick, bucket],
     and a diagnostic message.
@@ -186,6 +193,10 @@ def solve_ik_nearest(
 ) -> IKResult:
     """Try both elbow configs and sweep bucket angles to find a valid solution.
 
+    bucket_angle_world is the preferred absolute bucket pitch in the world frame
+    (radians; 0 = horizontal, negative = tip down).  If that exact angle yields
+    no valid IK solution the function sweeps toward 0° and tries small positive
+    angles before giving up.  
     Prefers elbow-up.
     """
     def _try(angle: float) -> Optional[IKResult]:
@@ -199,20 +210,16 @@ def solve_ik_nearest(
 
         return None 
 
-    # Exact requested angle
     if (r := _try(bucket_angle_world)):
         return r
 
-    # Sweep from requested angle toward 0 (more horizontal)
     for i in range(1, 16):
         angle = bucket_angle_world * (1.0 - i / 15)
         if (r := _try(angle)):
             return r
 
-    # Slight positive angles (bucket tilted up)
     for angle in (0.1, 0.2, 0.3, 0.5):
         if (r := _try(angle)):
             return r
 
-    # Return last failure
-    return solve_ik(target_xyz, x_base_world_frame, y_base_world_frame, yaw_base_world_frame, bucket_angle_world, elbow_up=True)
+    return IKResult(status=IKStatus.OUT_OF_REACH, message='No valid IK solution found for any bucket angle')
