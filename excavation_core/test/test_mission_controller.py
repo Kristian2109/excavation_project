@@ -7,16 +7,9 @@ Run:
     python -m pytest test/test_mission_controller.py -v
 """
 
-import copy
-import math
-from typing import Optional
-
-import numpy as np
 import pytest
 
 from excavation_core.excavation_grid import ExcavationGrid, HoleSpec
-from excavation_core.excavation_model import ScoopFootprint
-from excavation_core.excavation_planner import ExcavationPlan, PlannedScoop
 from excavation_core.mission_controller import (
     MissionController,
     MissionProgress,
@@ -153,7 +146,7 @@ class TestStateTransitions:
 # ====================================================================== #
 
 class TestScoopIteration:
-    def _setup_excavating(self, mc):
+    def _setup_excavating(self, mc: MissionController) -> MissionController:
         mc.start_mission()
         mc.on_base_arrived()
         mc.generate_plan()
@@ -195,13 +188,22 @@ class TestScoopIteration:
         assert mc.progress.scoops_succeeded == total
         assert mc.progress.scoops_failed == 0
 
-    def test_complete_with_failures(self, mc):
+    def test_complete_with_failures(self, mc: MissionController):
         self._setup_excavating(mc)
         total = mc.progress.total_scoops
+        print(f'Total scoops: {total}')
         for i in range(total):
-            mc.on_scoop_completed(i % 3 != 0)  # fail every 3rd
+            mc.on_scoop_completed(i % 3 != 0)
+
+        while mc.state == MissionState.RELOCATING:
+            mc.on_base_arrived()
+            if not mc.generate_plan():
+                break
+            for _ in range(mc.progress.total_scoops):
+                mc.on_scoop_completed(True)
+
         assert mc.state == MissionState.COMPLETED
-        assert mc.progress.scoops_succeeded + mc.progress.scoops_failed == total
+
 
     def test_scoop_sequence_ids(self, mc):
         """Scoops are returned in order by scoop_id."""

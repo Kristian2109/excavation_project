@@ -106,9 +106,9 @@ class BaseTrajectory:
 #  Helpers
 # ====================================================================== #
 
-def _wrap_angle(a: float) -> float:
+def _wrap_angle(angle: float) -> float:
     """Wrap angle to [-π, π]."""
-    return (a + math.pi) % (2 * math.pi) - math.pi
+    return (angle + math.pi) % (2 * math.pi) - math.pi
 
 
 # ====================================================================== #
@@ -146,13 +146,9 @@ def plan_base_trajectory(
     dx = goal.x - start.x
     dy = goal.y - start.y
     dist = math.hypot(dx, dy)
+    start_to_goal_angle = math.atan2(dy, dx) if dist > 1e-3 else start.yaw
 
-    if dist > 1e-3:
-        heading_to_goal = math.atan2(dy, dx)
-    else:
-        heading_to_goal = start.yaw   # no translation needed
-
-    angle_to_rotate_1 = _wrap_angle(heading_to_goal - start.yaw)
+    angle_to_rotate_1 = _wrap_angle(start_to_goal_angle - start.yaw)
     t_rotate_1 = abs(angle_to_rotate_1) / angular_speed if angular_speed > 0 else 0.0
 
     n_steps = max(1, int(math.ceil(t_rotate_1 / dt)))
@@ -174,17 +170,17 @@ def plan_base_trajectory(
         y = start.y + alpha * dy
         points.append(TrajectoryPoint(
             time=t + alpha * t_drive,
-            pose=BasePose(x=x, y=y, yaw=heading_to_goal),
+            pose=BasePose(x=x, y=y, yaw=start_to_goal_angle),
         ))
     t += t_drive
 
     # ----- Phase 3: Rotate to goal yaw ----- #
-    angle_to_rotate_2 = _wrap_angle(goal.yaw - heading_to_goal)
+    angle_to_rotate_2 = _wrap_angle(goal.yaw - start_to_goal_angle)
     t_rotate_2 = abs(angle_to_rotate_2) / angular_speed if angular_speed > 0 else 0.0
     n_steps = max(1, int(math.ceil(t_rotate_2 / dt)))
     for i in range(1, n_steps + 1):
         alpha = i / n_steps
-        yaw = heading_to_goal + alpha * angle_to_rotate_2
+        yaw = start_to_goal_angle + alpha * angle_to_rotate_2
         points.append(TrajectoryPoint(
             time=t + alpha * t_rotate_2,
             pose=BasePose(x=goal.x, y=goal.y, yaw=yaw),

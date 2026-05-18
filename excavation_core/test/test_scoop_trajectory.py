@@ -171,6 +171,7 @@ class TestUnreachable:
     def test_behind_robot(self):
         target = np.array([-5.0, 0.0, 0.0])
         traj = plan_single_scoop(target, base_x=BASE_X)
+        print(f'Trajectory for behind-robot target: {traj}')
         assert traj is None
 
 # ====================================================================== #

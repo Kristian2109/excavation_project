@@ -134,6 +134,16 @@ def solve_ik(
     # ------------------------------------------------------------------
     cabin_angle = math.atan2(y_base, x_base)
 
+    # Reject targets that require the cabin to swing beyond ±120°.
+    # Real excavators do not reach directly behind themselves.
+    MAX_CABIN_SWING = math.radians(120)
+    if abs(cabin_angle) > MAX_CABIN_SWING:
+        return IKResult(
+            status=IKStatus.OUT_OF_REACH,
+            message=f'Target behind robot: cabin swing {math.degrees(cabin_angle):.1f}° '
+                    f'exceeds ±{math.degrees(MAX_CABIN_SWING):.0f}° limit',
+        )
+
     # ------------------------------------------------------------------
     # 3. Swing-plane coordinates
     # ------------------------------------------------------------------
