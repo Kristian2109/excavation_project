@@ -90,7 +90,6 @@ def plan_single_scoop(
     approach_height: float = 0.5,
     lift_height: float = 0.8,
     bucket_dig_angle: float = -math.pi / 4,
-    bucket_scoop_angle: float = 0.3,
     scoop_id: int = 0,
 ) -> Optional[ScoopTrajectory]:
     """

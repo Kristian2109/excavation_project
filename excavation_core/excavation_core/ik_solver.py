@@ -1,21 +1,9 @@
 """
 ik_solver.py – Analytical inverse kinematics for the excavator arm.
 
-Solves for (cabin_joint, boom_joint, stick_joint, bucket_joint) given a
-desired bucket-tip position in the world frame.
+Joint chain: cabin (Z-axis swing) → boom (Y) → stick (Y) → bucket (Y)
 
-The arm has a simple planar geometry:
-  cabin_joint (Z-axis)  → selects the swing plane
-  boom_joint  (Y-axis)  → first link of a 2-link planar arm
-  stick_joint (Y-axis)  → second link of a 2-link planar arm
-  bucket_joint(Y-axis)  → orients the bucket (resolved last)
-
-IMPORTANT – FK sign convention:
-  R_y(+θ) rotates a vector's X-component toward -Z.  Therefore
-  **positive joint angles tilt the arm DOWNWARD** in the swing plane.
-  boom_joint=+1.0 → boom points ~57° below horizontal.
-
-This module is ROS-free and can be tested standalone.
+Sign convention: positive Y-rotation tilts the arm DOWNWARD.
 """
 
 from __future__ import annotations
@@ -28,7 +16,6 @@ from typing import Optional
 import numpy as np
 
 from excavation_core.robot_model import (
-    ExcavatorModel,
     JOINT_NAMES,
     CHASSIS_HEIGHT,
     CABIN_LENGTH,
@@ -41,22 +28,13 @@ from excavation_core.robot_model import (
 )
 
 
-# ====================================================================== #
-#  Constants derived from URDF geometry
-# ====================================================================== #
+# Geometry constants
+SHOULDER_X_BASE_FRAME = CABIN_LENGTH
+SHOULDER_Z_BASE_FRAME = CHASSIS_HEIGHT + CABIN_HEIGHT * 0.8
+L1 = BOOM_LENGTH   # 3.5 m
+L2 = STICK_LENGTH  # 2.9 m
+MAX_CABIN_SWING = math.radians(120)
 
-# Shoulder position in base_link frame (where the boom pivots)
-SHOULDER_X_LOCAL = CABIN_LENGTH           # 1.0 m forward
-SHOULDER_Z_LOCAL = CHASSIS_HEIGHT + CABIN_HEIGHT * 0.8  # 0.5 + 0.64 = 1.14 m up
-
-# Arm link lengths used in 2-link IK
-L1 = BOOM_LENGTH    # 3.5 m  (boom)
-L2 = STICK_LENGTH   # 2.9 m  (stick)
-
-
-# ====================================================================== #
-#  IK result
-# ====================================================================== #
 
 class IKStatus(Enum):
     SUCCESS = auto()
@@ -66,9 +44,8 @@ class IKStatus(Enum):
 
 @dataclass
 class IKResult:
-    """Result of an IK query."""
     status: IKStatus
-    joint_positions: Optional[np.ndarray] = None  # [cabin, boom, stick, bucket]
+    joint_positions: Optional[np.ndarray] = None
     message: str = ''
 
     @property
@@ -76,258 +53,172 @@ class IKResult:
         return self.status == IKStatus.SUCCESS
 
 
-# ====================================================================== #
-#  Analytical IK
-# ====================================================================== #
-
-def solve_ik(
-    target_xyz: np.ndarray,
-    base_x: float = 0.0,
-    base_y: float = 0.0,
-    base_yaw: float = 0.0,
-    bucket_angle_world: float = -math.pi / 4,
-    elbow_up: bool = False,
-) -> IKResult:
-    """
-    Compute joint angles to place the bucket tip at *target_xyz*.
-
-    Parameters
-    ----------
-    target_xyz : (3,) array
-        Desired bucket-tip position in the world frame [x, y, z].
-    base_x, base_y, base_yaw : float
-        Current base pose (world frame).  The base does not move during IK.
-    bucket_angle_world : float
-        Desired pitch of the bucket link in the swing plane, using the
-        standard math convention (negative = downward from horizontal).
-        Default -π/4 ≈ -45° which is a good general digging angle.
-        Note: -π/2 (straight down) often violates the bucket joint limit.
-    elbow_up : bool
-        If True, prefer the elbow-up (stick_joint > 0) solution.
-        Excavators normally use elbow-down (stick_joint < 0).
-
-    Returns
-    -------
-    IKResult
-        Contains status, joint_positions [cabin, boom, stick, bucket],
-        and a human-readable message.
-    """
-    target = np.asarray(target_xyz, dtype=float)
-    jdefs = _build_joint_defs()
-
-    # ------------------------------------------------------------------
-    # 1. Transform target into base_link frame
-    # ------------------------------------------------------------------
+def _world_to_base_frame(
+    target: np.ndarray, base_x: float, base_y: float, base_yaw: float,
+) -> tuple[float, float, float]:
+    """Transform world-frame target into base-local (x, y, z)."""
     cos_yaw = math.cos(base_yaw)
     sin_yaw = math.sin(base_yaw)
     dx = target[0] - base_x
     dy = target[1] - base_y
-    dz = target[2]
+    x_local = cos_yaw * dx + sin_yaw * dy
+    y_local = -sin_yaw * dx + cos_yaw * dy
+    return x_local, y_local, target[2]
 
-    # Rotate into base_link (undo base yaw)
-    x_base = cos_yaw * dx + sin_yaw * dy
-    y_base = -sin_yaw * dx + cos_yaw * dy
-    z_base = dz
 
-    # ------------------------------------------------------------------
-    # 2. Solve cabin_joint (swing about Z)
-    # ------------------------------------------------------------------
-    cabin_angle = math.atan2(y_base, x_base)
+def _bucket_tip_to_wrist(
+    r_target: float, z_target: float, bucket_angle_world: float,
+) -> tuple[float, float]:
+    """Back-compute wrist position from the bucket tip in the swing plane.
 
-    # Reject targets that require the cabin to swing beyond ±120°.
-    # Real excavators do not reach directly behind themselves.
-    MAX_CABIN_SWING = math.radians(120)
-    if abs(cabin_angle) > MAX_CABIN_SWING:
-        return IKResult(
-            status=IKStatus.OUT_OF_REACH,
-            message=f'Target behind robot: cabin swing {math.degrees(cabin_angle):.1f}° '
-                    f'exceeds ±{math.degrees(MAX_CABIN_SWING):.0f}° limit',
-        )
-
-    # ------------------------------------------------------------------
-    # 3. Swing-plane coordinates
-    # ------------------------------------------------------------------
-    # After the cabin swings, the entire arm lies in a vertical plane.
-    #   r = horizontal distance from the base Z-axis
-    #   z = height (upward positive)
-    r_target = math.sqrt(x_base**2 + y_base**2)
-    z_target = z_base
-
-    # ------------------------------------------------------------------
-    # 4. Back-compute wrist (bucket_joint origin) from bucket tip
-    # ------------------------------------------------------------------
-    # In the FK, the total Y-rotation at the bucket link is:
-    #   psi = boom + stick + bucket   (FK joint values)
-    # R_y(psi) applied to the bucket-tip offset (BL, 0, -BD) gives:
-    #   r_offset = BL*cos(psi) - BD*sin(psi)
-    #   z_offset = -BL*sin(psi) - BD*cos(psi)
-    #
-    # bucket_angle_world uses standard math convention (negative = down),
-    # but FK uses R_y where positive = down.  So: psi = -bucket_angle_world.
+    FK uses R_y where positive = down, so psi = -bucket_angle_world.
+    """
     psi = -bucket_angle_world
-
     r_offset = BUCKET_LENGTH * math.cos(psi) - BUCKET_DEPTH * math.sin(psi)
     z_offset = -BUCKET_LENGTH * math.sin(psi) - BUCKET_DEPTH * math.cos(psi)
+    return r_target - r_offset, z_target - z_offset
 
-    r_wrist = r_target - r_offset
-    z_wrist = z_target - z_offset
 
-    # ------------------------------------------------------------------
-    # 5. Two-link IK for boom + stick
-    # ------------------------------------------------------------------
-    # The FK convention: positive boom_joint tilts the arm DOWNWARD.
-    # We solve in the (dr, dz_down) plane where:
-    #   dr      = horizontal distance from shoulder to wrist
-    #   dz_down = how far the wrist is BELOW the shoulder (positive = below)
-    # This makes the 2-link IK angles directly match the FK joint values.
-    dr = r_wrist - SHOULDER_X_LOCAL
-    dz_down = SHOULDER_Z_LOCAL - z_wrist   # positive when wrist below shoulder
+def _solve_two_link(
+    horizontal_reach: float, vertical_drop: float, elbow_up: bool,
+) -> Optional[tuple[float, float]]:
+    """Solve 2-link planar IK for boom and stick angles.
 
-    d_sq = dr**2 + dz_down**2
-    d = math.sqrt(d_sq)
+    Works in the vertical swing plane.  The shoulder is the origin; positive
+    vertical_drop means the wrist is BELOW the shoulder.
 
-    # Reachability check
-    if d > L1 + L2:
-        return IKResult(
-            status=IKStatus.OUT_OF_REACH,
-            message=f'Target too far: distance to wrist = {d:.3f} m, '
-                    f'max reach = {L1 + L2:.3f} m',
-        )
-    if d < abs(L1 - L2):
-        return IKResult(
-            status=IKStatus.OUT_OF_REACH,
-            message=f'Target too close: distance = {d:.3f} m, '
-                    f'min reach = {abs(L1 - L2):.3f} m',
-        )
+    Returns (boom_angle, stick_angle) or None if the wrist is unreachable.
+    """
+    # Straight-line distance from shoulder to wrist
+    shoulder_to_wrist_sq = horizontal_reach**2 + vertical_drop**2
+    shoulder_to_wrist = math.sqrt(shoulder_to_wrist_sq)
 
-    # Law of cosines for stick (elbow) angle
-    cos_elbow = (d_sq - L1**2 - L2**2) / (2 * L1 * L2)
-    cos_elbow = float(np.clip(cos_elbow, -1.0, 1.0))
+    if shoulder_to_wrist > L1 + L2 or shoulder_to_wrist < abs(L1 - L2):
+        return None
 
-    if elbow_up:
-        stick_angle = math.acos(cos_elbow)    # positive (unusual for excavator)
-    else:
-        stick_angle = -math.acos(cos_elbow)   # negative (normal excavator posture)
+    # Law of cosines: find the interior angle at the elbow joint
+    cos_stick_angle = float(np.clip(
+        (shoulder_to_wrist_sq - L1**2 - L2**2) / (2 * L1 * L2), -1.0, 1.0,
+    ))
+    stick_angle = math.acos(cos_stick_angle) if elbow_up else -math.acos(cos_stick_angle)
 
-    # Angle from shoulder to wrist line (in the dz_down-positive plane)
-    alpha = math.atan2(dz_down, dr)
-
-    # Offset due to the elbow triangle
-    beta = math.atan2(
+    # Boom angle = angle of shoulder→wrist line from horizontal
+    #            − angle between boom and that line (from triangle geometry)
+    angle_of_shoulder_to_wrist_line = math.atan2(vertical_drop, horizontal_reach)
+    angle_boom_to_wrist_line = math.atan2(
         L2 * math.sin(stick_angle),
         L1 + L2 * math.cos(stick_angle),
     )
+    boom_angle = angle_of_shoulder_to_wrist_line - angle_boom_to_wrist_line
 
-    boom_angle = alpha - beta
+    return boom_angle, stick_angle
 
-    # ------------------------------------------------------------------
-    # 6. Solve bucket_joint
-    # ------------------------------------------------------------------
-    # Total FK rotation at bucket: psi = boom + stick + bucket
+
+def _check_joint_limits(joints: np.ndarray) -> Optional[str]:
+    """Return violation message if any joint is out of limits, else None."""
+    jdefs = _build_joint_defs()
+    violations = [
+        f'{name}: {joints[i]:.3f} rad outside [{jdefs[name].lower:.2f}, {jdefs[name].upper:.2f}]'
+        for i, name in enumerate(JOINT_NAMES)
+        if not jdefs[name].in_limits(joints[i])
+    ]
+    return '; '.join(violations) if violations else None
+
+
+def solve_ik(
+    target_xyz: np.ndarray,
+    x_base_world_frame: float = 0.0,
+    y_base_world_frame: float = 0.0,
+    yaw_base_world_frame: float = 0.0,
+    bucket_angle_world: float = -math.pi / 4,
+    elbow_up: bool = True,
+) -> IKResult:
+    """Compute joint angles to place the bucket tip at *target_xyz*.
+
+    Returns IKResult with status, joint_positions [cabin, boom, stick, bucket],
+    and a diagnostic message.
+    """
+    target = np.asarray(target_xyz, dtype=float)
+
+    x_base_base_frame, y_base_base_frame, z_base_base_frame = _world_to_base_frame(target, x_base_world_frame, y_base_world_frame, yaw_base_world_frame)
+
+    cabin_rotation_angle = math.atan2(y_base_base_frame, x_base_base_frame)
+    if abs(cabin_rotation_angle) > MAX_CABIN_SWING:
+        return IKResult(status=IKStatus.OUT_OF_REACH, message=(
+            f'Target behind robot: cabin swing {math.degrees(cabin_rotation_angle):.1f}° '
+            f'exceeds ±{math.degrees(MAX_CABIN_SWING):.0f}° limit'))
+
+    # 3. Swing-plane coordinates (radial distance + height)
+    distance_base_to_target = math.hypot(x_base_base_frame, y_base_base_frame)
+
+    # 4. Wrist position (subtract bucket offset)
+    distance_base_to_wrist, vertical_distance_base_to_wrist = _bucket_tip_to_wrist(distance_base_to_target, z_base_base_frame, bucket_angle_world)
+
+    # 5. Two-link IK (boom + stick)
+    distance_shoulder_to_wrist = distance_base_to_wrist - SHOULDER_X_BASE_FRAME
+    vertical_distance_shoulder_to_wrist = SHOULDER_Z_BASE_FRAME - vertical_distance_base_to_wrist
+
+    two_link = _solve_two_link(distance_shoulder_to_wrist, vertical_distance_shoulder_to_wrist, elbow_up=elbow_up)
+    if two_link is None:
+        d = math.hypot(distance_shoulder_to_wrist, vertical_distance_shoulder_to_wrist)
+        return IKResult(status=IKStatus.OUT_OF_REACH, message=(
+            f'Wrist distance {d:.3f} m outside [{abs(L1-L2):.3f}, {L1+L2:.3f}] m range'))
+
+    boom_angle, stick_angle = two_link
+
+    # 6. Bucket joint (psi = boom + stick + bucket)
+    psi = -bucket_angle_world
     bucket_angle = psi - boom_angle - stick_angle
 
-    # ------------------------------------------------------------------
-    # 7. Check joint limits
-    # ------------------------------------------------------------------
-    joints = np.array([cabin_angle, boom_angle, stick_angle, bucket_angle])
-
-    violations = []
-    for i, name in enumerate(JOINT_NAMES):
-        jd = jdefs[name]
-        if not jd.in_limits(joints[i]):
-            violations.append(
-                f'{name}: {joints[i]:.3f} rad outside [{jd.lower:.2f}, {jd.upper:.2f}]'
-            )
-
-    if violations:
+    # 7. Joint limit check
+    joints = np.array([cabin_rotation_angle, boom_angle, stick_angle, bucket_angle])
+    violation_msg = _check_joint_limits(joints)
+    if violation_msg:
         return IKResult(
             status=IKStatus.JOINT_LIMITS_VIOLATED,
             joint_positions=joints,
-            message='Joint limit violations: ' + '; '.join(violations),
+            message=f'Joint limit violations: {violation_msg}',
         )
 
-    return IKResult(
-        status=IKStatus.SUCCESS,
-        joint_positions=joints,
-        message=f'IK solved: cabin={math.degrees(cabin_angle):.1f}°, '
-                f'boom={math.degrees(boom_angle):.1f}°, '
-                f'stick={math.degrees(stick_angle):.1f}°, '
-                f'bucket={math.degrees(bucket_angle):.1f}°',
-    )
+    return IKResult(status=IKStatus.SUCCESS, joint_positions=joints)
 
 
 def solve_ik_nearest(
     target_xyz: np.ndarray,
-    base_x: float = 0.0,
-    base_y: float = 0.0,
-    base_yaw: float = 0.0,
+    x_base_world_frame: float = 0.0,
+    y_base_world_frame: float = 0.0,
+    yaw_base_world_frame: float = 0.0,
     bucket_angle_world: float = -math.pi / 4,
 ) -> IKResult:
-    """Try both elbow configs and sweep bucket angles if needed.
+    """Try both elbow configs and sweep bucket angles to find a valid solution.
 
-    1. Try the requested bucket_angle_world with elbow-down then elbow-up.
-    2. If that fails (joint limits), sweep bucket angles from the requested
-       value toward 0 (more horizontal).  This handles cases where the
-       bucket joint limit prevents a steep digging angle.
-
-    Prefers elbow-down (natural excavator posture).
+    Prefers elbow-up.
     """
-    # --- First: try the exact requested angle ---
-    for elbow_up in (False, True):
-        result = solve_ik(
-            target_xyz, base_x, base_y, base_yaw,
-            bucket_angle_world, elbow_up=elbow_up,
-        )
-        if result.success:
-            return result
+    def _try(angle: float) -> Optional[IKResult]:
+        r = solve_ik(target_xyz, x_base_world_frame, y_base_world_frame, yaw_base_world_frame, angle, elbow_up=True)
+        if r.success:
+            return r
 
-    # --- Second: sweep bucket angles from requested toward 0 ---
-    best_result = result
-    n_steps = 15
-    for i in range(1, n_steps + 1):
-        t = i / n_steps
-        angle = bucket_angle_world * (1.0 - t)   # lerp toward 0
-        for elbow_up in (False, True):
-            result = solve_ik(
-                target_xyz, base_x, base_y, base_yaw,
-                angle, elbow_up=elbow_up,
-            )
-            if result.success:
-                return result
+        r = solve_ik(target_xyz, x_base_world_frame, y_base_world_frame, yaw_base_world_frame, angle, elbow_up=False)
+        if r.success:            
+            return r
 
-    # --- Third: try slight positive angles (bucket tilted up) ---
+        return None 
+
+    # Exact requested angle
+    if (r := _try(bucket_angle_world)):
+        return r
+
+    # Sweep from requested angle toward 0 (more horizontal)
+    for i in range(1, 16):
+        angle = bucket_angle_world * (1.0 - i / 15)
+        if (r := _try(angle)):
+            return r
+
+    # Slight positive angles (bucket tilted up)
     for angle in (0.1, 0.2, 0.3, 0.5):
-        for elbow_up in (False, True):
-            result = solve_ik(
-                target_xyz, base_x, base_y, base_yaw,
-                angle, elbow_up=elbow_up,
-            )
-            if result.success:
-                return result
+        if (r := _try(angle)):
+            return r
 
-    return best_result
-
-
-def verify_ik_solution(
-    target_xyz: np.ndarray,
-    ik_result: IKResult,
-    base_x: float = 0.0,
-    base_y: float = 0.0,
-    base_yaw: float = 0.0,
-    tolerance: float = 0.05,
-) -> bool:
-    """Verify an IK solution using forward kinematics.
-
-    Returns True if the FK tip position matches target_xyz within
-    *tolerance* metres.
-    """
-    if ik_result.joint_positions is None:
-        return False
-
-    model = ExcavatorModel(
-        base_x=base_x, base_y=base_y, base_yaw=base_yaw,
-        joint_positions=ik_result.joint_positions.copy(),
-    )
-    tip = model.bucket_tip_position()
-    error = np.linalg.norm(tip - np.asarray(target_xyz))
-    return float(error) < tolerance
+    # Return last failure
+    return solve_ik(target_xyz, x_base_world_frame, y_base_world_frame, yaw_base_world_frame, bucket_angle_world, elbow_up=True)

@@ -30,9 +30,8 @@ from excavation_core.excavation_grid import ExcavationGrid
 from excavation_core.base_planner import BasePose
 from excavation_core.excavation_grid import HoleSpec
 from excavation_core.ik_solver import (
-    solve_ik_nearest,
-    SHOULDER_X_LOCAL,
-    SHOULDER_Z_LOCAL,
+    SHOULDER_X_BASE_FRAME,
+    SHOULDER_Z_BASE_FRAME,
     L1,
     L2,
 )
@@ -77,7 +76,6 @@ _STICK_UPPER = _JDEFS['stick_joint'].upper     # 0.3
 # Wrist offset from bucket tip (most favourable bucket angle for
 # minimising boom stress).  psi_opt maximises the vertical lift of
 # the wrist above the dig target.
-_BUCKET_HYPOT = math.hypot(BUCKET_LENGTH, BUCKET_DEPTH)
 _PSI_OPT = math.atan2(BUCKET_LENGTH, BUCKET_DEPTH)  # ~1.01 rad
 _WRIST_R_OFFSET = (BUCKET_LENGTH * math.cos(_PSI_OPT)
                    - BUCKET_DEPTH * math.sin(_PSI_OPT))  # ≈ 0.0
@@ -120,8 +118,8 @@ def _fast_reachable_mask(pos: BasePose, centers: np.ndarray) -> np.ndarray:
     dy = centers[:, 1] - pos.y
     r = np.sqrt(dx * dx + dy * dy)
 
-    dr = r - SHOULDER_X_LOCAL
-    dz = SHOULDER_Z_LOCAL - centers[:, 2]  # positive = below shoulder
+    dr = r - SHOULDER_X_BASE_FRAME
+    dz = SHOULDER_Z_BASE_FRAME - centers[:, 2]  # positive = below shoulder
 
     # ---- 1. outer / inner distance check (target) ----
     d_sq_target = dr * dr + dz * dz

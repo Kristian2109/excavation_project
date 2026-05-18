@@ -156,7 +156,7 @@
     <child  link="stick_link"/>
     <origin xyz="${boom_length} 0 0" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <limit lower="-2.7" upper="0.3" effort="8000.0" velocity="0.5"/>
+    <limit lower="-2.7" upper="2.7" effort="8000.0" velocity="0.5"/>
     <dynamics damping="80.0" friction="15.0"/>
   </joint>
 

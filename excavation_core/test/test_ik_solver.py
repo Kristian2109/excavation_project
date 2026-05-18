@@ -22,9 +22,8 @@ from excavation_core.ik_solver import (
     IKStatus,
     solve_ik,
     solve_ik_nearest,
-    verify_ik_solution,
-    SHOULDER_X_LOCAL,
-    SHOULDER_Z_LOCAL,
+    SHOULDER_X_BASE_FRAME,
+    SHOULDER_Z_BASE_FRAME,
 )
 from excavation_core.robot_model import ExcavatorModel
 
@@ -153,7 +152,7 @@ def test_too_far():
 
 def test_too_close_to_shoulder():
     """Target right at the shoulder — inside the min-reach sphere."""
-    target = np.array([SHOULDER_X_LOCAL, 0.0, SHOULDER_Z_LOCAL])
+    target = np.array([SHOULDER_X_BASE_FRAME, 0.0, SHOULDER_Z_BASE_FRAME])
     result = solve_ik_nearest(target)
     assert not result.success  # OUT_OF_REACH or JOINT_LIMITS_VIOLATED
 
@@ -256,30 +255,6 @@ def test_bucket_angle_sweep_finds_solution():
     result = solve_ik_nearest(target, bucket_angle_world=-math.pi / 2)
     assert result.success
     _assert_ik_fk_roundtrip(target, result)
-
-
-# ====================================================================== #
-#  verify_ik_solution helper
-# ====================================================================== #
-
-def test_valid_solution():
-    target = np.array([4.0, 0.0, 0.5])
-    result = solve_ik_nearest(target)
-    assert result.success
-    assert verify_ik_solution(target, result)
-
-
-def test_invalid_with_none_joints():
-    bad = IKResult(status=IKStatus.OUT_OF_REACH)
-    assert not verify_ik_solution(np.array([4.0, 0.0, 0.0]), bad)
-
-
-def test_wrong_solution():
-    """Joints that don't actually reach the target."""
-    target = np.array([4.0, 0.0, 0.5])
-    bad_joints = np.array([0.0, 0.0, 0.0, 0.0])
-    bad = IKResult(status=IKStatus.SUCCESS, joint_positions=bad_joints)
-    assert not verify_ik_solution(target, bad, tolerance=0.5)
 
 
 # ====================================================================== #

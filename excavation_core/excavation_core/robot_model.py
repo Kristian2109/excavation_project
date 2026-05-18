@@ -151,7 +151,7 @@ def _build_joint_defs() -> Dict[str, JointDef]:
             axis=np.array([0.0, 1.0, 0.0]),
             origin_xyz=np.array([BOOM_LENGTH, 0.0, 0.0]),
             origin_rpy=np.array([0.0, 0.0, 0.0]),
-            lower=-2.7, upper=0.3,
+            lower=-2.7, upper=2.7,
         ),
         'bucket_joint': JointDef(
             name='bucket_joint',
